@@ -139,50 +139,113 @@ export default function MemoApp({ dict, lang }: Props) {
   // 🎙️ 실시간 음성인식(STT) 상태 및 엔진 탑재
   const [isListening, setIsListening] = useState(false);
   const [isAiCorrecting, setIsAiCorrecting] = useState(false); // 🪄 AI 교정 로딩 상태 추가
+  const [aiCorrectingMessage, setAiCorrectingMessage] = useState('🪄 AI 찰떡이 교정 중...'); // 🪄 AI 로딩 메시지 상태 추가
   const [isVoiceUsed, setIsVoiceUsed] = useState(false); // 🎙️ 음성 인식 사용 여부 추적 상태 추가
   const [sttHasResult, setSttHasResult] = useState(true); // 🎙️ 가상 폰/웹뷰 STT 오동작 진단 힌트 상태 추가
 
-  // 🪄 어르신 구어체 ➔ 일목요연한 찰떡 어조 변환 초경량 로컬 AI 엔진
-  const runAiCorrection = () => {
+  // 🪄 Gemini API fetch 호출 헬퍼 비동기 함수
+  const callGeminiAPI = async (modelName: string, promptText: string, apiKey: string) => {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        contents: [{
+          parts: [{ text: promptText }]
+        }]
+      })
+    });
+    if (!response.ok) {
+      throw new Error(`Gemini API Call Failed (Status: ${response.status})`);
+    }
+    const data = await response.json();
+    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
+  };
+
+  // 🪄 어르신 구어체 ➔ 일목요연한 찰떡 어조 변환 초경량 로컬/글로벌 AI 엔진
+  const runAiCorrection = async () => {
     if (!inputText.trim()) return;
     setIsAiCorrecting(true);
+    setAiCorrectingMessage('🤖 AI 기억이가 문맥을 짚어보고 있어요...');
 
-    setTimeout(() => {
-      const originalText = inputText.trim();
-      let correctedText = originalText;
+    const hintMessages = [
+      '🤖 AI 기억이가 문맥을 짚어보고 있어요...',
+      '✍️ 발음 오류와 맞춤법을 말끔하게 가다듬는 중...',
+      '✨ 다듬어진 생각 문장을 이쁘게 조립하고 있어요...',
+      '⏰ 거의 다 되었습니다! 조금만 더 기다려 주세요...'
+    ];
+    let msgIndex = 0;
+    const intervalId = setInterval(() => {
+      msgIndex = (msgIndex + 1) % hintMessages.length;
+      setAiCorrectingMessage(hintMessages[msgIndex]);
+    }, 2000);
 
-      // 1) 대표적인 구어체 조사/감탄사 탈락 및 단정한 비서형 정리
-      correctedText = correctedText
-        .replace(/있잖아|있자녀|있구만|그..|저기..|음..|머시냐|거시기|말이여|말이야/g, '')
-        .replace(/가가지고|가서/g, '방문하여')
-        .replace(/\s+/g, ' ')
-        .trim();
+    const cleanup = () => {
+      clearInterval(intervalId);
+      setIsAiCorrecting(false);
+    };
 
-      // 2) 어르신 다빈도 키워드 기반 카테고리 이모지 매칭
-      const emojiRules = [
-        { pattern: /정형외과|이비인후과|치과|피부과|소아과|병원/g, replace: '🏥 병원 예약' },
-        { pattern: /내과|한의원|약국|물리치료/g, replace: '💊 건강/약' },
-        { pattern: /은행|신한은행|국민은행|농협|송금|계좌/g, replace: '🏦 은행/송금' },
-        { pattern: /돈|용돈|십만원|십만 원|오만원|오만 원|백만원|백만 원/g, replace: '💰 돈/재정' },
-        { pattern: /시장|마트|장보기|이마트|홈플러스|슈퍼/g, replace: '🛒 장보기' },
-        { pattern: /예약|일정/g, replace: '📅 일정' },
-        { pattern: /약속|모임|동창회|계모임/g, replace: '👥 약속/모임' },
-        { pattern: /전화|연락|카톡/g, replace: '📞 연락' },
-        { pattern: /아들|딸|기동이|영희/g, replace: '👦 가족' },
-      ];
+    const originalText = inputText.trim();
+    const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-      let matchedTag = '';
-      for (const rule of emojiRules) {
-        if (rule.pattern.test(correctedText)) {
-          matchedTag = rule.replace;
-          break;
+    // 만약 API Key가 없거나 기본 데모 값일 경우 -> 더욱 지능화된 로컬 스마트 폴백 교정 알고리즘 작동!
+    if (!geminiApiKey || geminiApiKey === '대표님의_키_입력') {
+      setTimeout(() => {
+        cleanup();
+        let refined = originalText
+          // 1) 대표적인 구어체 조사/감탄사 탈락 및 단정한 비서형 정리
+          .replace(/있잖아|있자녀|있구만|그\.\.|저기\.\.|음\.\.|머시냐|거시기|말이여|말이야/g, '')
+          .replace(/가가지고|가서/g, '방문하여')
+          .replace(/\s+/g, ' ')
+          .replace(/^(아|어|음|그|뭐|저|근데|그래서|어그게)\s*/gi, '')
+          .replace(/\s*(아|어|음|그|뭐|저)\s*$/gi, '')
+          .trim();
+
+        if (refined && !refined.match(/[.!?。！？]$/)) {
+          refined += '.';
         }
+
+        setInputText(refined);
+        alert('💡 [데모 모드] AI API 키가 아직 설정되지 않아, 로컬 스마트 교정기가 깔끔하게 다듬어 드렸어요! 깃허브나 Vercel 환경 변수에 진짜 Gemini API Key(NEXT_PUBLIC_GEMINI_API_KEY)를 등록하시면 초거대 AI 교정이 즉시 동작합니다. 😊');
+      }, 2500);
+      return;
+    }
+
+    const prompt = `너는 오타, 뭉개진 발음, 중언부언, 사투리가 섞인 중장년층의 한국어 말소리를 자연스럽고 품격 있는 표준 메모 문장으로 다듬는 40대 이상 타겟의 메모장 정리 비서 '기억이'야. 아래 텍스트는 사용자가 음성 인식으로 편하게 흘려 적은 내용이다. 이 내용을 1. 불필요한 추임새 제거, 2. 문맥상 오타 및 맞춤법 교정, 3. 표준어 순화를 거쳐 친근하면서도 정갈한 한글 문장으로 교정해줘. 부가 설명이나 서론, 결론, 따옴표 없이 오직 교정된 최종 결과 문장만 단 한 줄로 출력해야 해.\n\n사용자 음성 입력: "${originalText}"`;
+
+    try {
+      // 1차 시도: gemini-2.5-flash
+      let refinedText = "";
+      try {
+        refinedText = await callGeminiAPI("gemini-2.5-flash", prompt, geminiApiKey);
+      } catch (e1) {
+        console.warn("Gemini 2.5 Flash 실패, 1.5 Flash 2차 시도...", e1);
+        refinedText = await callGeminiAPI("gemini-1.5-flash", prompt, geminiApiKey);
       }
 
-      // 최종 단정화 서식 적용 (대표님 피드백 반영: 거추장스러운 접두사/꼬리표는 완전히 도려내고 100% 순수하고 깔끔하게 다듬어진 텍스트만 보존!)
-      setInputText(correctedText);
-      setIsAiCorrecting(false);
-    }, 900);
+      cleanup();
+      if (refinedText) {
+        setInputText(refinedText);
+      } else {
+        throw new Error("응답이 비어있음");
+      }
+    } catch (error) {
+      cleanup();
+      console.error("Gemini API 최종 연동 실패:", error);
+      
+      // 통신 에러 시 로컬 폴백 작동
+      let refined = originalText
+        .replace(/\s+/g, ' ')
+        .replace(/^(아|어|음|그|뭐|저|근데|그래서|어그게)\s*/gi, '')
+        .replace(/\s*(아|어|음|그|뭐|저)\s*$/gi, '')
+        .trim();
+      if (refined && !refined.match(/[.!?。！？]$/)) {
+        refined += '.';
+      }
+      setInputText(refined);
+      alert('⚠️ [인터넷 연결 지연] AI 서버와 일시적으로 통신이 원활하지 않아, 로컬 스마트 교정기가 안전하게 글을 다듬어 드렸어요! 😢');
+    }
   };
 
   const startSpeechRecognition = () => {
@@ -1088,7 +1151,7 @@ export default function MemoApp({ dict, lang }: Props) {
                     color: '#B38F00',
                     marginBottom: '10px'
                   }}>
-                    {voiceDict.aiCorrecting}
+                    {aiCorrectingMessage}
                   </div>
                 ) : (
                   <button
