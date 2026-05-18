@@ -230,12 +230,20 @@ body {
 /* ========== 무한 롤 메모 캔버스 ========== */
 #memo-canvas {
   flex: 1;
+  min-height: 0; /* flex 컨테이너 안에서 overflow-y 스크롤 작동에 필수 */
   overflow-y: auto;
+  overflow-x: hidden;
   padding: 16px 16px 80px; /* 하단 액션바 여백 */
   display: flex;
   flex-direction: column;
   background: var(--bg-page);
   scroll-behavior: smooth;
+}
+
+#timeline-scroll-container {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
 }
 
 /* 타임라인 날짜별 섹션 */
