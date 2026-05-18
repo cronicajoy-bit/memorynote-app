@@ -1,0 +1,24 @@
+{
+  "header": {
+    "title": "기억노트"
+  },
+  "tabs": {
+    "timeline": "무한 일력",
+    "archive": "별표 보관함"
+  },
+  "timeline": {
+    "sync": "자동 저장됨"
+  },
+  "actions": {
+    "voice": "말로 적기",
+    "voice_hint": "(AI 교정)",
+    "text": "글씨로 적기",
+    "edit": "수정",
+    "share": "공유"
+  },
+  "archive": {
+    "title": "별표 즐겨찾기 장부",
+    "subtitle": "중요한 메모만 모아보는 곳입니다.",
+    "empty": "별표 표시한 메모가 없습니다."
+  }
+}

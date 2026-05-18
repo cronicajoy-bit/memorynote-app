@@ -1,0 +1,24 @@
+{
+  "header": {
+    "title": "記憶ノート"
+  },
+  "tabs": {
+    "timeline": "無限カレンダー",
+    "archive": "星付き保存箱"
+  },
+  "timeline": {
+    "sync": "自動保存"
+  },
+  "actions": {
+    "voice": "音声で記録",
+    "voice_hint": "(AI補正)",
+    "text": "テキストで記録",
+    "edit": "編集",
+    "share": "共有"
+  },
+  "archive": {
+    "title": "星付きのお気に入り帳",
+    "subtitle": "重要なメモだけを集める場所です。",
+    "empty": "星付きのメモがありません。"
+  }
+}

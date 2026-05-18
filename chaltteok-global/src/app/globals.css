@@ -1,0 +1,652 @@
+/* ========================================
+   찰떡메모 - Headway 스타일 브루탈리즘 테마
+   ======================================== */
+
+:root {
+  --bg-page:        #F2EBE1;
+  --bg-header:      #FFDE59;
+  --bg-card:        #FFFDF9;
+  --bg-card-hover:  #FFF2B2;
+  --bg-input:       #FFFFFF;
+  --bg-modal:       #F2EBE1;
+  --bg-tab:         #F2EBE1;
+  --bg-tab-active:  #FFDE59;
+  --color-primary:  #1A1A1A;
+  --color-accent:   #F27A33;
+  --color-text:     #1A1A1A;
+  --color-sub:      #4A4A4A;
+  --color-border:   #1A1A1A;
+  --color-star:     #F27A33;
+  --color-save:     #1A1A1A;
+  --color-mic:      #F27A33;
+  --color-kakao:    #FFDE59;
+  --color-whatsapp: #25d366;
+  --shadow:         2px 2px 0 #1A1A1A;
+  --shadow-modal:   4px 4px 0 #1A1A1A;
+  --radius:         4px;
+  --font-size-base: 18px;
+  --font-serif:     'Noto Sans KR', sans-serif;
+  --font-sans:      'Noto Sans KR', sans-serif;
+  --transition:     0.15s ease;
+}
+
+/* 다크모드 */
+body.dark-mode {
+  --bg-page:        #1e1a14;
+  --bg-header:      #28231a;
+  --bg-card:        #2a2418;
+  --bg-card-hover:  #32291c;
+  --bg-input:       #24201a;
+  --bg-modal:       #28231a;
+  --bg-tab:         #1e1a14;
+  --bg-tab-active:  #2a2418;
+  --color-primary:  #d4a96a;
+  --color-accent:   #e8b870;
+  --color-text:     #e8dfc8;
+  --color-sub:      #a89878;
+  --color-border:   #4a4030;
+  --shadow:         0 2px 12px rgba(0,0,0,0.4);
+  --shadow-modal:   0 8px 40px rgba(0,0,0,0.6);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html {
+  font-size: var(--font-size-base);
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg-page);
+  color: var(--color-text);
+  font-family: var(--font-sans);
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  transition: background var(--transition), color var(--transition);
+  padding-bottom: 105px; /* 액션바 슬림화 및 보조글 배치 호환을 위해 넉넉히 조절 */
+}
+
+/* ========== 헤더 ========== */
+#app-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: #FFFFFF; /* 노란색에서 깔끔한 흰색(white)으로 변경! */
+  border-bottom: 2px solid var(--color-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 20px;
+  box-shadow: var(--shadow);
+}
+body.dark-mode #app-header {
+  background: var(--bg-header); /* 다크 모드일 때는 기존 다크 헤더 컬러 유지 */
+}
+
+#app-logo {
+  font-family: var(--font-serif);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: -0.02em;
+}
+
+#header-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.font-btn, #btn-toggle-theme {
+  background: var(--bg-card);
+  border: 2px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius);
+  padding: 6px 12px;
+  font-size: 0.9rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 1px 1px 0 var(--color-border);
+  transition: all var(--transition);
+}
+.font-btn:hover, #btn-toggle-theme:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+
+/* ========== 탭 ========== */
+#tab-nav {
+  display: flex;
+  background: var(--bg-tab);
+  border-bottom: 2px solid var(--color-border);
+  padding: 0 16px;
+  gap: 4px;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 13px 8px;
+  border: 2px solid transparent;
+  background: transparent;
+  color: var(--color-sub);
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition);
+  white-space: nowrap;
+  border-radius: var(--radius) var(--radius) 0 0;
+  margin-bottom: -2px;
+}
+.tab-btn.active {
+  color: var(--color-primary);
+  font-weight: 700;
+  background: var(--bg-tab-active);
+  border-color: var(--color-border);
+  border-bottom-color: transparent;
+}
+.tab-btn:hover:not(.active) {
+  color: var(--color-text);
+  background: var(--bg-card-hover);
+  border-color: var(--color-border);
+}
+
+/* ========== 탭 뷰 ========== */
+.tab-view { display: none; flex: 1; flex-direction: column; }
+.tab-view.active { display: flex; }
+
+/* ========== 날짜 헤더 ========== */
+#daily-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-header);
+  border-bottom: 2px solid var(--color-border);
+  position: relative;
+  z-index: 10;
+}
+
+#daily-date-left {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#daily-header-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+#daily-date-display {
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  letter-spacing: -0.02em;
+}
+
+#weather-icon {
+  font-size: 2rem;
+  line-height: 1;
+  animation: weatherFloat 3s ease-in-out infinite;
+  cursor: default;
+  user-select: none;
+}
+@keyframes weatherFloat {
+  0%, 100% { transform: translateY(0); }
+  50%       { transform: translateY(-3px); }
+}
+
+.sync-status {
+  font-size: 0.75rem;
+  color: var(--color-sub);
+  font-weight: 600;
+}
+
+/* ========== 메모 컨테이너 ========== */
+.memo-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--bg-page);
+}
+
+/* ========== 메모 카드 ========== */
+.memo-card {
+  background: var(--bg-card);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 18px 20px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: all var(--transition);
+  animation: slideUp 0.3s ease;
+  position: relative;
+}
+.memo-card:hover {
+  box-shadow: 4px 4px 0 var(--color-border);
+  transform: translateY(-2px);
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(15px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.memo-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.memo-time {
+  font-size: 0.75rem;
+  color: var(--color-sub);
+  font-weight: 600;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+
+.memo-text {
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.75;
+  color: var(--color-text);
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.memo-card-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.btn-star {
+  background: none;
+  border: none;
+  font-size: 1.45rem;
+  cursor: pointer;
+  opacity: 0.45;
+  transition: all var(--transition);
+  line-height: 1;
+  padding: 2px 4px;
+  filter: saturate(0.3); /* 비활성화 시 은은하고 차분한 회색조 느낌 */
+}
+.btn-star:hover  { opacity: 1; transform: scale(1.25); filter: saturate(1); }
+.btn-star.active {
+  opacity: 1;
+  filter: saturate(1.8) drop-shadow(0 0 5px rgba(255, 215, 0, 0.95)) drop-shadow(0 0 2px rgba(242, 122, 51, 0.9));
+  transform: scale(1.2);
+}
+
+.btn-share-card, .btn-edit-card {
+  background: var(--bg-input);
+  border: 1.5px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius);
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  cursor: pointer;
+  box-shadow: 1px 1px 0 var(--color-border);
+  transition: all var(--transition);
+}
+.btn-share-card:hover, .btn-edit-card:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+
+/* ========== 액션 바 (하단 고정) ========== */
+#action-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  z-index: 200;
+  display: flex;
+  flex-direction: column; /* 버튼 밑에 보조 텍스트 분리 배치를 위해 컬럼 방향 추가 */
+  gap: 6px;
+  padding: 10px 16px 8px; /* 위아래 패딩 슬림하게 단축 */
+  background: var(--bg-header);
+  border-top: 2px solid var(--color-border);
+  box-sizing: border-box;
+}
+
+.action-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 9px 10px; /* 상하 패딩 15px에서 9px로 40% 슬림 단축! */
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  font-weight: 700;
+  cursor: pointer;
+  background: var(--bg-input);
+  color: var(--color-text);
+  box-shadow: 2px 2px 0 var(--color-border);
+  transition: all var(--transition);
+}
+.action-btn.primary {
+  background: var(--color-mic);
+  color: #fff;
+}
+.action-btn.primary:hover {
+  background: #FF8F4D;
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--color-border);
+}
+.action-btn:not(.primary):hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--color-border);
+}
+
+/* ========== 아카이브/별표 뷰 ========== */
+.view-header {
+  padding: 20px 22px 14px;
+  border-bottom: 2px solid var(--color-border);
+  background: var(--bg-header);
+}
+.view-title {
+  font-family: var(--font-serif);
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--color-primary);
+  margin-bottom: 4px;
+}
+.view-subtitle {
+  font-size: 0.85rem;
+  color: var(--color-sub);
+}
+
+.archive-container {
+  flex: 1;
+  overflow-y: auto;
+  background: var(--bg-page);
+}
+
+/* ========== 별표 카드 ========== */
+.star-card {
+  background: var(--bg-card);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  position: relative;
+  box-shadow: var(--shadow);
+  transition: transform var(--transition), box-shadow var(--transition);
+}
+.star-card:hover {
+  box-shadow: 4px 4px 0 var(--color-border);
+  transform: translateY(-2px);
+}
+.star-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px dashed var(--color-border);
+  padding-bottom: 6px;
+  margin-bottom: 4px;
+}
+.star-card-date {
+  font-size: 0.8rem;
+  color: var(--color-sub);
+  font-weight: 600;
+}
+.btn-edit-star-card {
+  background: var(--bg-input);
+  border: 1.5px solid var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius);
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  cursor: pointer;
+  box-shadow: 1px 1px 0 var(--color-border);
+  transition: all var(--transition);
+}
+.btn-edit-star-card:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+
+/* ========== 빈 상태 ========== */
+.empty-hint {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+.empty-hint p {
+  text-align: center;
+  font-size: 1rem;
+  color: var(--color-sub);
+  line-height: 2;
+  font-family: var(--font-serif);
+}
+
+/* ========== 모달 공통 ========== */
+@keyframes modalUp {
+  from { transform: translateY(40px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  font-family: var(--font-serif);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--color-primary);
+}
+
+#memo-textarea {
+  width: 100%;
+  background: var(--bg-input);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  line-height: 1.8;
+  color: var(--color-text);
+  resize: vertical;
+  outline: none;
+  transition: border-color var(--transition);
+  min-height: 140px;
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+#memo-textarea:focus { border-color: var(--color-accent); }
+
+.modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.btn-primary {
+  padding: 14px;
+  background: var(--color-mic);
+  color: #fff;
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 1rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--color-border);
+  transition: all var(--transition);
+}
+.btn-primary:hover {
+  background: #FF8F4D;
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--color-border);
+}
+.btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-secondary {
+  padding: 12px;
+  background: var(--bg-input);
+  color: var(--color-text);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 0.95rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  cursor: pointer;
+  box-shadow: 2px 2px 0 var(--color-border);
+  transition: all var(--transition);
+}
+.btn-secondary:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--color-border);
+}
+
+/* ========== 인라인 텍스트 입력 박스 ========== */
+.inline-input-box {
+  padding: 12px 16px;
+  background: var(--bg-card);
+  border-bottom: 2px solid var(--color-border);
+}
+
+/* ========== 🔍 실시간 검색 및 조약돌 카테고리 태그 바 (대표님 승인 A+C안) ========== */
+#search-filter-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-card);
+  border-bottom: 2px solid var(--color-border);
+}
+
+.search-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.search-input-wrapper input {
+  width: 100%;
+  padding: 12px 40px 12px 40px;
+  font-size: 1rem;
+  font-family: var(--font-sans);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  background: var(--bg-input);
+  color: var(--color-text);
+  box-shadow: var(--shadow);
+  outline: none;
+  transition: all var(--transition);
+}
+
+.search-input-wrapper input:focus {
+  box-shadow: 4px 4px 0 var(--color-border);
+  transform: translateY(-2px);
+}
+
+.search-input-wrapper .search-icon {
+  position: absolute;
+  left: 14px;
+  font-size: 1.1rem;
+  pointer-events: none;
+}
+
+#btn-clear-search {
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  font-size: 1rem;
+  cursor: pointer;
+  padding: 4px;
+}
+
+.category-tag-bar {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scrollbar-width: none; /* Firefox */
+}
+
+.category-tag-bar::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
+}
+
+.tag-btn {
+  white-space: nowrap;
+  padding: 8px 14px;
+  font-size: 0.88rem;
+  font-weight: 700;
+  font-family: var(--font-sans);
+  background: var(--bg-card);
+  border: 2px solid var(--color-border);
+  border-radius: 20px; /* 조약돌(Pebble) 스타일 */
+  color: var(--color-text);
+  cursor: pointer;
+  box-shadow: 1px 1px 0 var(--color-border);
+  transition: all var(--transition);
+}
+
+.tag-btn:hover {
+  background: var(--bg-card-hover);
+  transform: translateY(-1px);
+  box-shadow: 2px 2px 0 var(--color-border);
+}
+
+.tag-btn.active {
+  background: var(--bg-tab-active);
+  color: var(--color-primary);
+  transform: translateY(1px);
+  box-shadow: none;
+}
+
+/* 🎨 형광펜 하이라이트 (대표님 승인 A안) */
+mark.highlight {
+  background: linear-gradient(120deg, rgba(255, 222, 89, 0.9) 0%, rgba(255, 222, 89, 0.9) 100%);
+  padding: 0 4px;
+  border-radius: 3px;
+  color: #1A1A1A;
+  font-weight: bold;
+}
+
+body.dark-mode mark.highlight {
+  background: linear-gradient(120deg, rgba(232, 184, 112, 0.9) 0%, rgba(232, 184, 112, 0.9) 100%);
+  color: #1e1a14;
+}
+
+/* .dark-mode 클래스가 MemoApp 컨테이너에 붙었을 때도 지원 */
+.dark-mode mark.highlight {
+  background: linear-gradient(120deg, rgba(232, 184, 112, 0.9) 0%, rgba(232, 184, 112, 0.9) 100%);
+  color: #1e1a14;
+}

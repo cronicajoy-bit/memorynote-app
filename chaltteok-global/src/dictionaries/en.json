@@ -1,0 +1,24 @@
+{
+  "header": {
+    "title": "Memory Note"
+  },
+  "tabs": {
+    "timeline": "Timeline",
+    "archive": "Starred"
+  },
+  "timeline": {
+    "sync": "Saved"
+  },
+  "actions": {
+    "voice": "Voice Memo",
+    "voice_hint": "(AI Polished)",
+    "text": "Write Text",
+    "edit": "Edit",
+    "share": "Share"
+  },
+  "archive": {
+    "title": "Starred Memories",
+    "subtitle": "Your most important notes in one place.",
+    "empty": "No starred memos yet."
+  }
+}
