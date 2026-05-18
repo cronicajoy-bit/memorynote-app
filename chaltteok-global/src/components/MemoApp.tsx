@@ -1132,6 +1132,21 @@ export default function MemoApp({ dict, lang }: Props) {
             {/* 텍스트 입력 모달(인라인) */}
             {showInput && (
               <div style={{ padding: '12px 16px', background: 'var(--bg-card)', borderBottom: '2px solid var(--color-border)' }}>
+                {/* 💡 "글씨로 적기" 모드용 친근한 오타 교정 안내 꿀팁 (대표님 피드백 완벽 매핑) */}
+                {!isVoiceMode && (
+                  <div style={{ 
+                    fontSize: '0.8rem', 
+                    color: 'var(--color-accent)', 
+                    fontWeight: 800, 
+                    marginBottom: '8px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    lineHeight: '1.4'
+                  }}>
+                    ✏️ 오타나 띄어쓰기가 조금 틀려도 괜찮아요! 아래 [🪄 AI 찰떡 교정]을 누르면 예쁜 표준 문장으로 다듬어 드립니다.
+                  </div>
+                )}
                 <textarea
                   id="memo-textarea"
                   value={inputText}
