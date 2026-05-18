@@ -142,6 +142,8 @@ export default function MemoApp({ dict, lang }: Props) {
   const [aiCorrectingMessage, setAiCorrectingMessage] = useState('🪄 AI 찰떡이 교정 중...'); // 🪄 AI 로딩 메시지 상태 추가
   const [isVoiceUsed, setIsVoiceUsed] = useState(false); // 🎙️ 음성 인식 사용 여부 추적 상태 추가
   const [sttHasResult, setSttHasResult] = useState(true); // 🎙️ 가상 폰/웹뷰 STT 오동작 진단 힌트 상태 추가
+  const [isVoiceMode, setIsVoiceMode] = useState(false); // 🎙️ 현재 말로 적기(음성) 모드로 입력 폼이 열려 있는지 제어 상태 추가
+  const [isKeyboardOpen, setIsKeyboardOpen] = useState(false); // 📱 모바일 가상 키보드 감지 상태 추가
 
   // 🪄 Gemini API fetch 호출 헬퍼 비동기 함수
   const callGeminiAPI = async (modelName: string, promptText: string, apiKey: string) => {
@@ -382,6 +384,27 @@ export default function MemoApp({ dict, lang }: Props) {
   // 클라이언트 마운트 완료 감지 (Hydration mismatch 방지)
   useEffect(() => { setMounted(true); }, []);
 
+  // 📱 모바일 가상 키보드 팝업 감지 및 body 패딩 동적 제어 (대표님 피드백: 키보드가 입력 영역을 가리는 현상 완벽 방어!)
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const initialHeight = window.innerHeight;
+    const handleResize = () => {
+      // 뷰포트 높이가 초기 높이보다 150px 이상 좁아지면 가상 키보드가 열린 것으로 간주
+      if (window.innerHeight < initialHeight - 150) {
+        setIsKeyboardOpen(true);
+        document.body.style.paddingBottom = '10px'; // 키보드가 열렸을 때는 패딩을 슬림하게 줄여서 저장/취소 버튼 가림 현상 해결!
+      } else {
+        setIsKeyboardOpen(false);
+        document.body.style.paddingBottom = '105px'; // 키보드가 닫혔을 때는 원래 하단바 자리 패딩 복원!
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      document.body.style.paddingBottom = ''; // 언마운트 시 초기화
+    };
+  }, []);
+
   // 🌓 다크 모드 상태를 document.body에 동기화하여 전체 화면 다크모드 무력화 격파!
   useEffect(() => {
     if (!mounted) return;
@@ -590,7 +613,12 @@ export default function MemoApp({ dict, lang }: Props) {
       setShowLimitModal(true);
       return;
     }
-    setShowInput(p => !p);
+    setIsVoiceMode(false); // 글씨 적기 모드로 강제 설정
+    setShowInput(true); // 입력 폼 열기
+    setTimeout(() => {
+      const el = document.getElementById('memo-textarea');
+      if (el) el.focus();
+    }, 80);
   };
 
   /* 메모 저장 및 수정 */
@@ -1114,29 +1142,31 @@ export default function MemoApp({ dict, lang }: Props) {
                   style={{ fontSize: `${fontSize}px` }}
                 />
                 
-                {/* 🎙️ 음성 인식 보조 안내 및 다시 말하기 제어 영역 */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 10px 0' }}>
-                  <span style={{ fontSize: '0.78rem', color: 'var(--color-sub)' }}>
-                    {isListening ? voiceDict.listeningAuto : voiceDict.hintInfo}
-                  </span>
-                  {!isListening && (
-                    <button 
-                      onClick={startSpeechRecognition}
-                      style={{
-                        background: 'var(--color-accent)',
-                        color: '#fff',
-                        border: 'none',
-                        borderRadius: '6px',
-                        padding: '4px 10px',
-                        fontSize: '0.78rem',
-                        fontWeight: 'bold',
-                        cursor: 'pointer'
-                      }}
-                    >
-                      🎙️ {voiceDict.speakAgainBtn}
-                    </button>
-                  )}
-                </div>
+                {/* 🎙️ 음성 인식 보조 안내 및 다시 말하기 제어 영역 (대표님 피드백: "글씨로 적기" 모드 시에는 지저분한 음성 가이드와 다시 말하기 버튼을 완전히 보이지 않게 처리!) */}
+                {isVoiceMode && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 10px 0' }}>
+                    <span style={{ fontSize: '0.78rem', color: 'var(--color-sub)' }}>
+                      {isListening ? voiceDict.listeningAuto : voiceDict.hintInfo}
+                    </span>
+                    {!isListening && (
+                      <button 
+                        onClick={startSpeechRecognition}
+                        style={{
+                          background: 'var(--color-accent)',
+                          color: '#fff',
+                          border: 'none',
+                          borderRadius: '6px',
+                          padding: '4px 10px',
+                          fontSize: '0.78rem',
+                          fontWeight: 'bold',
+                          cursor: 'pointer'
+                        }}
+                      >
+                        🎙️ {voiceDict.speakAgainBtn}
+                      </button>
+                    )}
+                  </div>
+                )}
 
                 {/* 🪄 AI 찰떡 교정 실행 단추 및 로딩 연출 (대표님 인사이트: 항상 제자리에 이쁘게 대기하여 UI 요동 방지!) */}
                 {isAiCorrecting ? (
@@ -1306,54 +1336,57 @@ export default function MemoApp({ dict, lang }: Props) {
       </main>
 
       {/* ====== 하단 고정 액션 바 ====== */}
-      <div id="action-bar" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-        <div style={{ display: 'flex', gap: '10px', width: '100%', alignItems: 'stretch' }}>
-          {/* 말로 적기 버튼 열 */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-            <button
-              className="action-btn primary"
-              style={{ width: '100%' }}
-              onClick={() => {
-                // 대표님 마케팅 승인안: 보이스 메모도 전체 50개 용량 쿼터에 똑같이 포함하여 50건 이하 시 전면 무료 제공!
-                if (isPremium || memos.length < 50) {
-                  // 거슬리는 alert 팝업을 완전히 없애고, 즉시 입력창(showInput)을 화사하게 열고 음성인식 기동!
-                  setShowInput(true);
-                  startSpeechRecognition();
-                  setTimeout(() => {
-                    const el = document.getElementById('memo-textarea');
-                    if (el) el.focus();
-                  }, 80);
-                } else {
-                  // 50건 가득 채운 무료 유저에게만 아름다운 기억공간 락 모달을 오픈하여 결제 유도
-                  setShowLimitModal(true);
-                }
-              }}
-            >
-              🎙️ {dict.actions.voice}
-            </button>
-            {/* 💬 대표님 요건: 마이크 아이콘 없이, 말로적기 버튼 아래에 정확히 수직 배치 */}
-            <span style={{ 
-              fontSize: '0.78rem', 
-              color: 'var(--color-sub)', 
-              fontWeight: 800, 
-              letterSpacing: '-0.01em',
-              opacity: 0.85,
-              textAlign: 'center'
-            }}>
-              {dict.actions.voice_hint}
-            </span>
-          </div>
+      {!isKeyboardOpen && (
+        <div id="action-bar" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          <div style={{ display: 'flex', gap: '10px', width: '100%', alignItems: 'stretch' }}>
+            {/* 말로 적기 버튼 열 */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <button
+                className="action-btn primary"
+                style={{ width: '100%' }}
+                onClick={() => {
+                  // 대표님 마케팅 승인안: 보이스 메모도 전체 50개 용량 쿼터에 똑같이 포함하여 50건 이하 시 전면 무료 제공!
+                  if (isPremium || memos.length < 50) {
+                    setIsVoiceMode(true); // 말로 적기(음성) 모드로 지정
+                    // 거슬리는 alert 팝업을 완전히 없애고, 즉시 입력창(showInput)을 화사하게 열고 음성인식 기동!
+                    setShowInput(true);
+                    startSpeechRecognition();
+                    setTimeout(() => {
+                      const el = document.getElementById('memo-textarea');
+                      if (el) el.focus();
+                    }, 80);
+                  } else {
+                    // 50건 가득 채운 무료 유저에게만 아름다운 기억공간 락 모달을 오픈하여 결제 유도
+                    setShowLimitModal(true);
+                  }
+                }}
+              >
+                🎙️ {dict.actions.voice}
+              </button>
+              {/* 💬 대표님 요건: 마이크 아이콘 없이, 말로적기 버튼 아래에 정확히 수직 배치 */}
+              <span style={{ 
+                fontSize: '0.78rem', 
+                color: 'var(--color-sub)', 
+                fontWeight: 800, 
+                letterSpacing: '-0.01em',
+                opacity: 0.85,
+                textAlign: 'center'
+              }}>
+                {dict.actions.voice_hint}
+              </span>
+            </div>
 
-          {/* 글씨로 적기 버튼 열 */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-            <button className="action-btn" style={{ width: '100%' }} onClick={handleOpenInput}>
-              ✏️ {dict.actions.text}
-            </button>
-            {/* 💡 양쪽 열의 완벽한 높이 대칭(정렬)을 위한 투명 여백 */}
-            <span style={{ fontSize: '0.78rem', visibility: 'hidden', userSelect: 'none' }}>&nbsp;</span>
+            {/* 글씨로 적기 버튼 열 */}
+            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
+              <button className="action-btn" style={{ width: '100%' }} onClick={handleOpenInput}>
+                ✏️ {dict.actions.text}
+              </button>
+              {/* 💡 양쪽 열의 완벽한 높이 대칭(정렬)을 위한 투명 여백 */}
+              <span style={{ fontSize: '0.78rem', visibility: 'hidden', userSelect: 'none' }}>&nbsp;</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* ====== 공유 모달 ====== */}
       <ShareModal
