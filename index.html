@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>기억노트 - 하루 한 장, 나의 생각 기록</title>
+  <meta name="description" content="배울 필요 없는 아날로그 감성의 하루 한 장 메모장. 40대 이상을 위한 극직관 AI 메모 앱 기억노트." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@300;400;500;600&family=Noto+Sans+KR:wght@300;400;500&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=2.9" />
+</head>
+<body>
+
+  <!-- ====== 상단 헤더 ====== -->
+  <header id="app-header">
+    <div id="header-left">
+      <span id="app-logo">🧠 기억노트</span>
+    </div>
+    <div id="header-right">
+      <button id="btn-font-decrease" class="font-btn" title="글자 작게" aria-label="글자 작게">a−</button>
+      <button id="btn-font-increase" class="font-btn" title="글자 크게" aria-label="글자 크게">A+</button>
+      <button id="btn-toggle-theme" title="테마 전환" aria-label="테마 전환">🌙</button>
+    </div>
+  </header>
+
+  <!-- ====== 탭 네비게이션 ====== -->
+  <nav id="tab-nav">
+    <button class="tab-btn active" id="tab-today" data-tab="today" aria-label="무한 일력">📅 무한 일력</button>
+    <button class="tab-btn" id="tab-star" data-tab="star" aria-label="별표 즐겨찾기">⭐ 별표 보관함</button>
+  </nav>
+
+  <!-- ====== 무한 일력 타임라인 탭 ====== -->
+  <main id="view-today" class="tab-view active">
+
+    <!-- 날짜 표시 및 백업 표시기 (스티키 고정 헤더 역할) -->
+    <div id="daily-header">
+      <div id="daily-date-left">
+        <div id="daily-date-display">2026년 5월 17일 일요일</div>
+      </div>
+      <div id="daily-header-right">
+        <span id="weather-icon" title="현재 날씨">🌤️</span>
+        <div id="save-indicator"><span id="save-dot">●</span> <span id="save-text">백업 완료</span></div>
+    </div>
+
+    <!-- 🔍 실시간 검색창 & 🏷️ 자동 카테고리 단추 (대표님 승인 A+C안) -->
+    <div id="search-filter-section">
+      <div class="search-input-wrapper">
+        <span class="search-icon">🔍</span>
+        <input type="text" id="input-search" placeholder="찾고 싶은 기억을 여기에 적어보세요..." aria-label="기억 검색" />
+        <button id="btn-clear-search" class="hidden" aria-label="검색 지우기">❌</button>
+      </div>
+      <div class="category-tag-bar">
+        <button class="tag-btn active" data-category="all">전체 📝</button>
+        <button class="tag-btn" data-category="finance">금융/돈 💵</button>
+        <button class="tag-btn" data-category="meeting">약속/모임 👥</button>
+        <button class="tag-btn" data-category="shopping">장보기/할일 🛒</button>
+        <button class="tag-btn" data-category="diary">일상/기록 ✍️</button>
+      </div>
+    </div>
+
+    <!-- 메모 리스트 (날짜별 메모장이 세로로 끊김 없이 쭉~ 연결되는 무한 롤 캔버스) -->
+    <div id="memo-canvas">
+      <!-- 이 내부에서 오늘자 메모와 지난 모든 보관 메모가 날짜 카드로 쭉 정렬됩니다 -->
+      <div id="timeline-scroll-container">
+        <!-- 오늘 작성 입력 힌트 영역 -->
+        <div id="today-input-section" class="timeline-date-section">
+          <div class="sticky-date-header">✍️ 오늘의 생각 적기</div>
+          <div id="memo-list"></div>
+        </div>
+
+        <!-- 지난 과거의 메모장들이 아래로 끊김 없이 쭉 렌더링되는 구간 -->
+        <div id="past-timeline-section"></div>
+      </div>
+    </div>
+
+    <!-- 하단 액션 바 (항상 하단에 고정되어 즉시 음성/입력 대기) -->
+    <div id="action-bar">
+      <button id="btn-voice" class="action-btn primary" title="음성 메모 (AI 교정)" aria-label="음성 메모">
+        🎙️ <span>말로 적기 (AI 기억)</span>
+      </button>
+      <button id="btn-add-text" class="action-btn" title="텍스트 메모 추가" aria-label="텍스트 추가">
+        ✏️ <span>글씨로 적기</span>
+      </button>
+    </div>
+
+  </main>
+
+  <!-- ====== 별표 즐겨찾기 탭 ====== -->
+  <main id="view-star" class="tab-view">
+    <div class="view-header">
+      <h2>⭐ 별표 즐겨찾기 장부</h2>
+      <p class="view-sub">별표를 누른 중요한 메모들이 날짜와 무관하게 한데 모입니다.</p>
+    </div>
+    <div id="star-list"></div>
+    <div id="star-empty" class="empty-hint">
+      <p>⭐ 메모 옆의 별표를 터치해 두시면<br/>두고두고 볼 중요한 메모장으로 여기에 자동 분류됩니다.</p>
+    </div>
+  </main>
+
+  <!-- ====== 텍스트 입력 모달 ====== -->
+  <div id="modal-input" class="modal hidden" role="dialog" aria-modal="true" aria-label="메모 입력">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span id="modal-input-title">✏️ 메모 입력</span>
+        <button id="modal-close" aria-label="닫기">✕</button>
+      </div>
+      <textarea id="memo-textarea" placeholder="여기에 메모를 입력하세요..." rows="6" autofocus></textarea>
+      <div class="modal-actions">
+        <button id="btn-submit-memo" class="btn-primary">저장하기</button>
+        <button id="btn-cancel-memo" class="btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== 음성 녹음 모달 ====== -->
+  <div id="modal-voice" class="modal hidden" role="dialog" aria-modal="true" aria-label="음성 메모">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span>🎙️ 음성으로 메모하기</span>
+        <button id="voice-close" aria-label="닫기">✕</button>
+      </div>
+      <div id="voice-status">
+        <div id="voice-wave">
+          <span></span><span></span><span></span><span></span><span></span>
+        </div>
+        <p id="voice-hint">🔴 마이크 버튼을 눌러 말씀하세요</p>
+      </div>
+      <div id="voice-transcript-box">
+        <p id="voice-raw-label">인식된 음성:</p>
+        <p id="voice-raw"></p>
+        <p id="voice-ai-label">AI 교정 결과:</p>
+        <p id="voice-refined"></p>
+      </div>
+      <div class="modal-actions">
+        <button id="btn-start-voice" class="btn-primary">🔴 녹음 시작</button>
+        <button id="btn-save-voice" class="btn-primary hidden">💾 이 내용으로 저장</button>
+        <button id="btn-cancel-voice" class="btn-secondary">취소</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ====== 공유/복사 모달 ====== -->
+  <div id="modal-share" class="modal hidden" role="dialog" aria-modal="true" aria-label="공유 및 복사">
+    <div class="modal-box">
+      <div class="modal-header">
+        <span>📤 공유하기</span>
+        <button id="share-close" aria-label="닫기">✕</button>
+      </div>
+      <div id="share-preview"></div>
+      <div class="modal-actions share-actions">
+        <button id="btn-copy-text" class="btn-primary">📋 글 복사</button>
+        <button id="btn-share-kakao" class="btn-kakao">카카오톡 전송</button>
+        <button id="btn-share-whatsapp" class="btn-whatsapp">WhatsApp 전송</button>
+        <button id="btn-close-share" class="btn-secondary">닫기</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 오버레이 -->
+  <div id="overlay" class="hidden"></div>
+
+  <script src="app.js?v=2.9"></script>
+</body>
+</html>
