@@ -75,25 +75,25 @@ export default function MemoApp({ dict, lang }: Props) {
     en: {
       hintInfo: '👉 Press the [Speak Again] button to turn on the microphone',
       speakAgainBtn: 'Speak Again',
-      aiPolishBtn: '🪄 Simplify and summarize long notes (AI Assistant)',
+      aiPolishBtn: '🪄 AI Simplify & Polish',
       aiCorrecting: '🪄 AI Assistant is polishing your note... 🌸',
       listening: '🎙️ Speak now, I will write it down automatically',
       listeningAuto: '🎙️ Speak now, I will write it down automatically',
       emulatorWarning: '⚠️ Emulator may not capture host audio. Try on your host PC Chrome browser for seamless magical voice writing! 🌸',
     },
     ja: {
-      hintInfo: '👉 [もう一度話す] ボタンを押すとマイクがオンになります',
+      hintInfo: '👉 [もう一度話す] ボタンを押すとマイク가 온になります',
       speakAgainBtn: 'もう一度話す',
-      aiPolishBtn: '🪄 長いお話をスッキリ要約する (AIアシスタント)',
+      aiPolishBtn: '🪄 AI スッキリ整理',
       aiCorrecting: '🪄 AIアシスタントがノートを綺麗に整えています... 🌸',
       listening: '🎙️ 今話すと自動的に書き留められます',
       listeningAuto: '🎙️ 今話すと自動的に書き留められます',
-      emulatorWarning: '⚠️ エミュレータはPCマイクの接続制限により無音になる場合があります。PCのChromeブラウザでお試しいただくと、音声入力がスムーズに動作します！🌸',
+      emulatorWarning: '⚠️ エミュレータはPCマ이크の接続制限により無音になる場合があります。PCのChromeブラウザでお試しいただくと、音声入力がスムーズに動作します！🌸',
     },
     ko: {
       hintInfo: '👉 [다시 말하기] 버튼을 누르면 마이크가 켜져요',
       speakAgainBtn: '다시 말하기',
-      aiPolishBtn: '🪄 긴 이야기 깔끔하게 요약하기 (AI 비서)',
+      aiPolishBtn: '🪄 AI 깔끔하게 정리',
       aiCorrecting: '🪄 AI 비서가 글을 단정하고 알아보기 쉽게 다듬는 중... 🌸',
       listening: '🎙️ 지금 말씀하시면 자동으로 받아적어요',
       listeningAuto: '🎙️ 지금 말씀하시면 자동으로 받아적어요',
@@ -102,7 +102,7 @@ export default function MemoApp({ dict, lang }: Props) {
   }[lang] || {
     hintInfo: '👉 [다시 말하기] 버튼을 누르면 마이크가 켜져요',
     speakAgainBtn: '다시 말하기',
-    aiPolishBtn: '🪄 긴 이야기 깔끔하게 요약하기 (AI 비서)',
+    aiPolishBtn: '🪄 AI 깔끔하게 정리',
     aiCorrecting: '🪄 AI 비서가 글을 단정하고 알아보기 쉽게 다듬는 중... 🌸',
     listening: '🎙️ 지금 말씀하시면 자동으로 받아적어요',
     listeningAuto: '🎙️ 지금 말씀하시면 자동으로 받아적어요',
@@ -1144,7 +1144,7 @@ export default function MemoApp({ dict, lang }: Props) {
                     gap: '4px',
                     lineHeight: '1.4'
                   }}>
-                    ✏️ 오타나 띄어쓰기가 조금 틀려도 괜찮아요! 아래 [🪄 AI 찰떡 교정]을 누르면 예쁜 표준 문장으로 다듬어 드립니다.
+                    ✏️ 오타나 띄어쓰기가 조금 틀려도 괜찮아요! 아래 [🪄 AI 깔끔하게 정리]를 누르면 예쁜 표준 문장으로 다듬어 드립니다.
                   </div>
                 )}
                 <textarea
