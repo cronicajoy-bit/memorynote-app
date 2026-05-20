@@ -53,6 +53,39 @@ function formatTime(): string {
 }
 
 /* ────────────────────────────────
+   유틸: 날짜 구분선 레이블 생성 (실버세대 친화형)
+ ──────────────────────────────── */
+function formatDateSeparatorLabel(dateKey: string, lang: Locale): string {
+  const todayKey = getTodayKey();
+  const yesterdayDate = new Date();
+  yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+  const yesterdayKey = `${yesterdayDate.getFullYear()}-${String(yesterdayDate.getMonth() + 1).padStart(2, '0')}-${String(yesterdayDate.getDate()).padStart(2, '0')}`;
+
+  const KO_DAYS = ['일요일', '월요일', '화요일', '수요일', '목요일', '금요일', '토요일'];
+  const EN_DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+  const JA_DAYS = ['日曜日', '月曜日', '火曜日', '水曜日', '木曜日', '金曜日', '土曜日'];
+
+  const [year, month, day] = dateKey.split('-').map(Number);
+  const d = new Date(year, month - 1, day);
+  const dow = d.getDay();
+
+  if (dateKey === todayKey) {
+    if (lang === 'en') return '📅 Today';
+    if (lang === 'ja') return '📅 今日';
+    return `📅 오늘 · ${month}월 ${day}일 ${KO_DAYS[dow]}`;
+  }
+  if (dateKey === yesterdayKey) {
+    if (lang === 'en') return '📅 Yesterday';
+    if (lang === 'ja') return '📅 昨日';
+    return `📅 어제 · ${month}월 ${day}일 ${KO_DAYS[dow]}`;
+  }
+
+  if (lang === 'en') return `📅 ${d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', weekday: 'long' })}`;
+  if (lang === 'ja') return `📅 ${month}月${day}日 ${JA_DAYS[dow]}`;
+  return `📅 ${month}월 ${day}일 ${KO_DAYS[dow]}`;
+}
+
+/* ────────────────────────────────
    WMO 날씨 코드 → 이모지
  ──────────────────────────────── */
 function wmoToEmoji(code: number): string {
@@ -1624,24 +1657,43 @@ export default function MemoApp({ dict, lang }: Props) {
                   </p>
                 </div>
               )}
-              {filteredMemos.map(memo => (
-                <div key={memo.id} className={`memo-card${starredIds.has(memo.id) ? ' starred' : ''}`}>
-                  <div className="memo-card-top">
-                    <span className="memo-time">{memo.time}</span>
-                    <div className="memo-card-actions">
-                      <button className={`btn-star${starredIds.has(memo.id) ? ' active' : ''}`}
-                        onClick={() => toggleStar(memo.id)}
-                      >⭐</button>
-                      <button className="btn-edit-card" onClick={() => startEdit(memo)}>✏️ {dict.actions.edit}</button>
-                      <button
-                        className="btn-share-card"
-                        onClick={() => setCurrentShare(memo)}
-                      >👤 {dict.actions.share}</button>
+              {(() => {
+                // 날짜 그룹핑: dateKey 기준으로 구분선 삽입
+                const elements: React.ReactNode[] = [];
+                let lastDateKey = '';
+                filteredMemos.forEach((memo, idx) => {
+                  // 새로운 날짜 그룹 시작 시 구분선 삽입
+                  if (memo.dateKey !== lastDateKey) {
+                    elements.push(
+                      <div key={`sep-${memo.dateKey}-${idx}`} className="date-separator">
+                        <span className="date-separator-label">
+                          {formatDateSeparatorLabel(memo.dateKey, lang)}
+                        </span>
+                      </div>
+                    );
+                    lastDateKey = memo.dateKey;
+                  }
+                  elements.push(
+                    <div key={memo.id} className={`memo-card${starredIds.has(memo.id) ? ' starred' : ''}`}>
+                      <div className="memo-card-top">
+                        <span className="memo-time">{memo.time}</span>
+                        <div className="memo-card-actions">
+                          <button className={`btn-star${starredIds.has(memo.id) ? ' active' : ''}`}
+                            onClick={() => toggleStar(memo.id)}
+                          >⭐</button>
+                          <button className="btn-edit-card" onClick={() => startEdit(memo)}>✏️ {dict.actions.edit}</button>
+                          <button
+                            className="btn-share-card"
+                            onClick={() => setCurrentShare(memo)}
+                          >👤 {dict.actions.share}</button>
+                        </div>
+                      </div>
+                      <div className="memo-text" style={{ fontSize: `${fontSize}px` }}>{renderHighlightedText(memo.text, searchQuery)}</div>
                     </div>
-                  </div>
-                  <div className="memo-text" style={{ fontSize: `${fontSize}px` }}>{renderHighlightedText(memo.text, searchQuery)}</div>
-                </div>
-              ))}
+                  );
+                });
+                return elements;
+              })()}
             </div>
           </>
         )}

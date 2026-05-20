@@ -650,3 +650,58 @@ body.dark-mode mark.highlight {
   background: linear-gradient(120deg, rgba(232, 184, 112, 0.9) 0%, rgba(232, 184, 112, 0.9) 100%);
   color: #1e1a14;
 }
+
+/* ========================================
+   📅 날짜 구분선 - 실버세대 친화 스타일
+   크고 선명하게! 한눈에 쏙! 캘린더 뱃지형
+   ======================================== */
+.date-separator {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 4px 0 2px;
+  /* 첫 번째 구분선(맨 위)은 여백 최소화 */
+  margin-top: 2px;
+  margin-bottom: 4px;
+}
+
+.date-separator::before,
+.date-separator::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, #C8A84B 40%, #C8A84B 60%, transparent);
+  opacity: 0.55;
+}
+
+.date-separator-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  background: linear-gradient(135deg, #FFFBE8 0%, #FFF0B2 100%);
+  border: 2.5px solid #C8A84B;
+  border-radius: 24px;
+  font-family: var(--font-serif);
+  font-size: 1rem;        /* 60대 이상 가독성을 위해 넉넉한 크기 */
+  font-weight: 900;
+  color: #7A5800;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  box-shadow: 2px 2px 0 rgba(200, 168, 75, 0.35);
+  transition: all 0.15s ease;
+  user-select: none;
+}
+
+/* 다크모드 대응 */
+body.dark-mode .date-separator::before,
+body.dark-mode .date-separator::after {
+  background: linear-gradient(90deg, transparent, #6B5520 40%, #6B5520 60%, transparent);
+}
+
+body.dark-mode .date-separator-label {
+  background: linear-gradient(135deg, #2e2410 0%, #3a2e14 100%);
+  border-color: #6B5520;
+  color: #e8c878;
+  box-shadow: 2px 2px 0 rgba(107, 85, 32, 0.5);
+}
