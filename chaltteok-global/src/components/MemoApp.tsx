@@ -1758,7 +1758,27 @@ export default function MemoApp({ dict, lang }: Props) {
                   <div key={memo.id} className="star-card">
                     <div className="star-card-top">
                       <span className="star-card-date">{memo.dateKey} {memo.time}</span>
-                      <button className="btn-edit-star-card" onClick={() => startEdit(memo)}>✏️ {dict.actions.edit}</button>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {/* ⭐ 별표 해제 버튼 (안전 확인 장치 포함) */}
+                        <button
+                          className="btn-unstar-archive"
+                          onClick={() => {
+                            const confirmMsg =
+                              lang === 'en'
+                                ? '⭐ Remove this from your favorites?\n\nIt will no longer appear in the Favorites tab.'
+                                : lang === 'ja'
+                                ? '⭐ お気に入りから外しますか？\n\nお気に入りタブに表示されなくなります。'
+                                : '⭐ 별표를 해제할까요?\n\n별표 보관함에서 사라집니다.\n(메모 자체는 지워지지 않아요!)';
+                            if (window.confirm(confirmMsg)) {
+                              toggleStar(memo.id);
+                            }
+                          }}
+                          title={lang === 'en' ? 'Remove from favorites' : lang === 'ja' ? 'お気に入りを外す' : '별표 해제'}
+                        >
+                          ⭐ {lang === 'en' ? 'Unstar' : lang === 'ja' ? '解除' : '별표 해제'}
+                        </button>
+                        <button className="btn-edit-star-card" onClick={() => startEdit(memo)}>✏️ {dict.actions.edit}</button>
+                      </div>
                     </div>
                     <div className="memo-text" style={{ fontSize: `${fontSize}px` }}>{renderHighlightedText(memo.text, searchQuery)}</div>
                   </div>

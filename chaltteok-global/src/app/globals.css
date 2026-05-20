@@ -430,6 +430,44 @@ body.dark-mode #app-header {
   box-shadow: 2px 2px 0 var(--color-border);
 }
 
+/* ⭐ 별표 해제 버튼 - 실버세대 친화형 (선명한 황금색으로 눈에 쏙!) */
+.btn-unstar-archive {
+  background: linear-gradient(135deg, #FFF0A0 0%, #FFDE59 100%);
+  border: 2px solid #C8A84B;
+  color: #7A5800;
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-weight: 900;
+  padding: 5px 12px;
+  cursor: pointer;
+  box-shadow: 2px 2px 0 #C8A84B;
+  transition: all var(--transition);
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.btn-unstar-archive:hover {
+  background: linear-gradient(135deg, #FFE066 0%, #FFC800 100%);
+  transform: translateY(-1px);
+  box-shadow: 3px 3px 0 #C8A84B;
+}
+.btn-unstar-archive:active {
+  transform: translate(1px, 1px);
+  box-shadow: 1px 1px 0 #C8A84B;
+}
+
+body.dark-mode .btn-unstar-archive {
+  background: linear-gradient(135deg, #3a2e10 0%, #4a3a14 100%);
+  border-color: #6B5520;
+  color: #e8c878;
+  box-shadow: 2px 2px 0 #6B5520;
+}
+body.dark-mode .btn-unstar-archive:hover {
+  background: linear-gradient(135deg, #4a3a14 0%, #5a4a1a 100%);
+  box-shadow: 3px 3px 0 #6B5520;
+}
+
 /* ========== 빈 상태 ========== */
 .empty-hint {
   flex: 1;
