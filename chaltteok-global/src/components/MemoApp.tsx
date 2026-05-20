@@ -130,6 +130,13 @@ export default function MemoApp({ dict, lang }: Props) {
   const [dismissBanner, setDismissBanner] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
+  // 🪜 스토리보드 5단계 점진적 피처 가이드 닫힘 상태
+  const [dismissedGuides, setDismissedGuides] = useState<Set<string>>(new Set());
+
+  // 🧠 AI 리마인더 일정 적재 배열 상태
+  const [scheduledReminders, setScheduledReminders] = useState<{ id: string; targetDate: string; content: string }[]>([]);
+  const [dismissedReminders, setDismissedReminders] = useState<Set<string>>(new Set());
+
   // 🎁 자녀 대리 결제(효도 선물) 모드 유무 감지
   const [isGiftMode, setIsGiftMode] = useState(false);
 
@@ -515,6 +522,26 @@ export default function MemoApp({ dict, lang }: Props) {
   useEffect(() => {
     if (!mounted) return;
 
+    // 가이드 닫힘 상태 및 AI 리마인더 로드
+    try {
+      const savedGuides = localStorage.getItem('chaltteok_dismissed_guides');
+      if (savedGuides) {
+        setDismissedGuides(new Set(JSON.parse(savedGuides)));
+      }
+      
+      const savedReminders = localStorage.getItem('chaltteok_scheduled_reminders');
+      if (savedReminders) {
+        setScheduledReminders(JSON.parse(savedReminders));
+      }
+
+      const savedDismissedReminders = localStorage.getItem('chaltteok_dismissed_reminders');
+      if (savedDismissedReminders) {
+        setDismissedReminders(new Set(JSON.parse(savedDismissedReminders)));
+      }
+    } catch (e) {
+      console.warn('로컬 가이드 및 리마인더 데이터 로드 실패:', e);
+    }
+
     if (user && isPremium && dbMemos) {
       // 🌟 프리미엄 유저: Supabase 클라우드 동기화
       const mapped: Memo[] = dbMemos.map((m: any) => ({
@@ -565,6 +592,34 @@ export default function MemoApp({ dict, lang }: Props) {
       console.warn('⚠️ [하이브리드 세이프가드] 로컬 스토리지 별표 저장이 차단되어 임시 상태로 유지됩니다.', e);
     }
   }, [starredIds, user, isPremium, mounted]);
+
+  // 가이드 및 리마인더 자동 저장 세이프가드
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      localStorage.setItem('chaltteok_dismissed_guides', JSON.stringify(Array.from(dismissedGuides)));
+    } catch (e) {
+      console.warn('로컬 가이드 상태 저장 실패:', e);
+    }
+  }, [dismissedGuides, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      localStorage.setItem('chaltteok_scheduled_reminders', JSON.stringify(scheduledReminders));
+    } catch (e) {
+      console.warn('로컬 리마인더 데이터 저장 실패:', e);
+    }
+  }, [scheduledReminders, mounted]);
+
+  useEffect(() => {
+    if (!mounted) return;
+    try {
+      localStorage.setItem('chaltteok_dismissed_reminders', JSON.stringify(Array.from(dismissedReminders)));
+    } catch (e) {
+      console.warn('로컬 닫은 리마인더 상태 저장 실패:', e);
+    }
+  }, [dismissedReminders, mounted]);
 
   /* 날씨 로드 (Geolocation 미지원 및 모바일 인앱 브라우저 강제 지연 방어) */
   useEffect(() => {
@@ -621,6 +676,121 @@ export default function MemoApp({ dict, lang }: Props) {
     }, 80);
   };
 
+  /* 🧠 [AI & 로컬 하이브리드] 스마트 리마인더 날짜/일정 추출 엔진 */
+  const extractReminderFromText = async (text: string): Promise<{ hasReminder: boolean; targetDate: string; content: string }> => {
+    const now = new Date();
+    const todayYear = now.getFullYear();
+    const todayMonth = now.getMonth(); // 0-11
+    const todayDay = now.getDate();
+    const todayStr = `${todayYear}-${String(todayMonth + 1).padStart(2, '0')}-${String(todayDay).padStart(2, '0')}`;
+
+    // 1. 로컬 스마트 추론 (Gemini 미작동 시 폴백 및 초고속 매핑)
+    const localParse = (): { hasReminder: boolean; targetDate: string; content: string } => {
+      // 1) "몇월 몇일" 패턴
+      const monthDayMatch = text.match(/(\d+)\s*월\s*(\d+)\s*일/);
+      if (monthDayMatch) {
+        const month = parseInt(monthDayMatch[1]) - 1; // 0-11
+        const day = parseInt(monthDayMatch[2]);
+        let year = todayYear;
+        if (month < todayMonth) {
+          year += 1;
+        }
+        const targetDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        let content = text.replace(/\d+\s*월\s*\d+\s*일(날|에)?\s*/g, '').trim();
+        if (!content) content = '기억할 일정';
+        return { hasReminder: true, targetDate: targetDateStr, content: content.substring(0, 15) };
+      }
+
+      // 2) "몇일" 패턴 (대표님 공식 핵심 스마트 날짜 룰!)
+      const dayMatch = text.match(/(\d+)\s*일/);
+      if (dayMatch) {
+        const day = parseInt(dayMatch[1]);
+        let targetYear = todayYear;
+        let targetMonth = todayMonth;
+
+        if (day < todayDay) {
+          // 오늘 이전 일자이면 자동 다음 달(익월) 이월!
+          targetMonth += 1;
+          if (targetMonth > 11) {
+            targetMonth = 0;
+            targetYear += 1;
+          }
+        }
+        // 오늘 이후이거나 같으면 이번 달!
+        const targetDateStr = `${targetYear}-${String(targetMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        let content = text.replace(/\d+\s*일(날|에)?\s*/g, '').trim();
+        if (!content) content = '기억할 일정';
+        return { hasReminder: true, targetDate: targetDateStr, content: content.substring(0, 15) };
+      }
+
+      // 3) 내일/모레 패턴
+      if (text.includes('내일')) {
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        const targetDateStr = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, '0')}-${String(tomorrow.getDate()).padStart(2, '0')}`;
+        let content = text.replace(/내일(날|에)?\s*/g, '').trim();
+        if (!content) content = '내일 일정';
+        return { hasReminder: true, targetDate: targetDateStr, content: content.substring(0, 15) };
+      }
+      if (text.includes('모레')) {
+        const dayAfterTomorrow = new Date(now);
+        dayAfterTomorrow.setDate(now.getDate() + 2);
+        const targetDateStr = `${dayAfterTomorrow.getFullYear()}-${String(dayAfterTomorrow.getMonth() + 1).padStart(2, '0')}-${String(dayAfterTomorrow.getDate()).padStart(2, '0')}`;
+        let content = text.replace(/모레(날|에)?\s*/g, '').trim();
+        if (!content) content = '모레 일정';
+        return { hasReminder: true, targetDate: targetDateStr, content: content.substring(0, 15) };
+      }
+
+      return { hasReminder: false, targetDate: '', content: '' };
+    };
+
+    const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
+    if (!geminiApiKey || geminiApiKey === '대표님의_키_입력') {
+      return localParse();
+    }
+
+    // 2. Gemini 지능형 AI 파싱 엔진 구동
+    try {
+      const prompt = `사용자의 메모 텍스트에서 약속 일정 정보(약속 날짜와 일정 요약)를 파싱해야 합니다.
+오늘 날짜는 ${todayStr} 입니다.
+반드시 아래 규칙과 룰을 철저히 준수하여 유효한 JSON 형태로만 반환해야 합니다:
+1. 사용자가 '월'을 명시하지 않고 '일'만 언급했을 때, 그 날짜가 오늘(${todayStr}) 기준 미래의 날짜(오늘 포함)이면 '이번 달'로 날짜를 완성합니다. 만약 과거의 날짜이면 '다음 달'로 날짜를 자동 완성합니다.
+2. 약속이나 일정이 명시되어 있지 않다면 "hasReminder": false 로 지정합니다.
+3. 응답은 다른 잡다한 설명이나 백틱(\`\`\`) 없이 오직 JSON 데이터 문자열 한 줄만 출력하십시오.
+
+출력 JSON 스키마:
+{
+  "hasReminder": true 또는 false,
+  "targetDate": "YYYY-MM-DD" 형태로 완성된 날짜,
+  "content": "일정 제목 요약 (10자 이내, 예: 친구 약속)"
+}
+
+사용자 메모 텍스트: "${text}"`;
+
+      let responseText = "";
+      try {
+        responseText = await callGeminiAPI("gemini-2.5-flash", prompt, geminiApiKey);
+      } catch {
+        responseText = await callGeminiAPI("gemini-1.5-flash", prompt, geminiApiKey);
+      }
+
+      // JSON 추출 정비
+      const cleanJson = responseText.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleanJson);
+      if (parsed && typeof parsed.hasReminder === 'boolean') {
+        return {
+          hasReminder: parsed.hasReminder,
+          targetDate: parsed.targetDate || '',
+          content: parsed.content || '기억할 일정'
+        };
+      }
+      return localParse();
+    } catch (e) {
+      console.warn("AI 리마인더 추출 실패, 로컬 룰 엔진 가동:", e);
+      return localParse();
+    }
+  };
+
   /* 메모 저장 및 수정 */
   const saveMemo = useCallback(async () => {
     if (!inputText.trim()) return;
@@ -631,19 +801,32 @@ export default function MemoApp({ dict, lang }: Props) {
       return;
     }
 
+    const memoText = inputText.trim();
+
     if (editingMemo) {
       // 1) 프리미엄 유저의 Supabase 백엔드 데이터베이스 동기화
       if (user && isPremium) {
-        await updateMemo(editingMemo.id, inputText.trim());
+        await updateMemo(editingMemo.id, memoText);
       }
-      setMemos(prev => prev.map(m => m.id === editingMemo.id ? { ...m, text: inputText.trim() } : m));
+      setMemos(prev => prev.map(m => m.id === editingMemo.id ? { ...m, text: memoText } : m));
+      
+      // 수정된 메모의 리마인더 일정 재파싱
+      const extracted = await extractReminderFromText(memoText);
+      if (extracted.hasReminder && extracted.targetDate) {
+        setScheduledReminders(prev => {
+          // 기존에 이 메모 ID에 대한 리마인더가 있다면 교체, 없으면 추가
+          const filtered = prev.filter(r => r.id !== editingMemo.id);
+          return [...filtered, { id: editingMemo.id, targetDate: extracted.targetDate, content: extracted.content }];
+        });
+      }
+
       setEditingMemo(null);
     } else {
       const newMemoId = `m-${Date.now()}`;
       
       const newMemo: Memo = {
         id: newMemoId,
-        text: inputText.trim(),
+        text: memoText,
         time: formatTime(),
         isVoice: isVoiceUsed, // 🎙️ 음성 인식을 거친 내역을 온전히 기록
         dateKey: TODAY_KEY,
@@ -651,18 +834,29 @@ export default function MemoApp({ dict, lang }: Props) {
 
       // 2) 프리미엄 유저의 Supabase 백엔드 데이터베이스 등록
       if (user && isPremium) {
-        const created = await addMemo(inputText.trim(), TODAY_KEY, newMemo.time, isVoiceUsed, lang);
+        const created = await addMemo(memoText, TODAY_KEY, newMemo.time, isVoiceUsed, lang);
         if (created) {
           newMemo.id = created.id; // DB 실제 ID 연동
         }
       }
 
       setMemos(prev => [newMemo, ...prev]);
+
+      // 🧠 AI 및 로컬 룰 기반 일정 자동 추출 기동!
+      const extracted = await extractReminderFromText(memoText);
+      if (extracted.hasReminder && extracted.targetDate) {
+        setScheduledReminders(prev => [
+          ...prev,
+          { id: newMemo.id, targetDate: extracted.targetDate, content: extracted.content }
+        ]);
+        // 당일 당월 매핑이 잘 등록되었음을 알려주는 피드백 안내 (어르신 안심 꿀팁)
+        alert(`⏰ 리마인더 일정이 자동으로 등록되었습니다!\n📅 약속 날짜: ${extracted.targetDate}\n📌 내용: ${extracted.content}`);
+      }
     }
     setInputText('');
     setIsVoiceUsed(false); // 🎙️ 음성 사용 이력 안전하게 리셋
     setShowInput(false);
-  }, [inputText, editingMemo, TODAY_KEY, isPremium, memos.length, user, addMemo, updateMemo, lang, isVoiceUsed]);
+  }, [inputText, editingMemo, TODAY_KEY, isPremium, memos.length, user, addMemo, updateMemo, lang, isVoiceUsed, extractReminderFromText]);
 
   /* 수정 취소 */
   const cancelMemo = useCallback(() => {
@@ -717,18 +911,16 @@ export default function MemoApp({ dict, lang }: Props) {
 
   return (
     <div
-      className={mounted && darkMode ? 'dark-mode' : ''}
+      className={`app-container ${mounted && darkMode ? 'dark-mode' : ''}`}
       style={{ fontSize: `${fontSize}px` }}
       suppressHydrationWarning
     >
-
       {/* ====== 상단 헤더 ====== */}
       <header id="app-header">
         <div id="header-left">
           <span id="app-logo">📝 {dict.header.title}</span>
         </div>
         <div id="header-right">
-          {/* ⚙️ 대표님의 100점짜리 인사이트: 상단 버튼들을 직관적인 '⚙️ 설정' 버튼으로 간결하게 묶고, 상태에 따라 '닫기' 유도! */}
           <button 
             className="font-btn" 
             onClick={() => setShowSettings(p => !p)}
@@ -737,7 +929,7 @@ export default function MemoApp({ dict, lang }: Props) {
               alignItems: 'center', 
               gap: '6px', 
               background: showSettings 
-                ? (darkMode ? '#3A2F5D' : '#E8DFFF') // 다크모드/라이트모드 세련된 보라색 테마로 교체!
+                ? (darkMode ? '#3A2F5D' : '#E8DFFF')
                 : 'var(--bg-card)',
               color: showSettings 
                 ? (darkMode ? '#E8DFFF' : '#3D2E6F') 
@@ -745,36 +937,30 @@ export default function MemoApp({ dict, lang }: Props) {
               borderColor: showSettings 
                 ? (darkMode ? '#E8DFFF' : '#3D2E6F') 
                 : 'var(--color-border)',
-              fontWeight: 'bold',
-              boxShadow: showSettings 
-                ? (darkMode ? '1px 1px 0 #E8DFFF' : '1px 1px 0 #3D2E6F') 
-                : 'none'
+              fontWeight: 'bold'
             }}
           >
-            ⚙️ {showSettings 
-              ? (lang === 'en' ? 'Close Settings' : lang === 'ja' ? '設定を閉じる' : '설정 닫기')
-              : (lang === 'en' ? 'Settings' : lang === 'ja' ? '設定' : '설정')
-            }
+            ⚙️ {showSettings ? '설정 닫기' : '설정'}
           </button>
         </div>
       </header>
 
-      {/* ⚙️ 설정 인라인 드롭다운 패널 (헤더 아래에서 부드럽게 슬라이드 동작) */}
+      {/* ⚙️ 설정 인라인 드롭다운 패널 */}
       {showSettings && (
         <div style={{
-          background: darkMode ? '#201A30' : '#F0E9FF', // 대표님 피드백 완벽 반영: 기존에 사용하지 않던 라벤더 보라색 계열로 영역 구분 200% 확실하게!
-          borderBottom: darkMode ? '3px solid #3A2F5D' : '3px solid #3D2E6F', // 보색 느낌의 고급진 딥퍼플 라인 포인트!
+          background: darkMode ? '#201A30' : '#F0E9FF',
+          borderBottom: darkMode ? '3px solid #3A2F5D' : '3px solid #3D2E6F',
           padding: '16px 20px',
           display: 'flex',
           flexDirection: 'column',
           gap: 14,
           animation: 'modalUp 0.15s ease',
-          boxShadow: 'inset 0 -2px 5px rgba(0,0,0,0.05)'
+          boxShadow: 'inset 0 -2px 5px rgba(0,0,0,0.05)',
+          zIndex: 300
         }}>
-          {/* 1) 글씨 크기 설정 행 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)' }}>
-              🔤 {lang === 'en' ? 'Font Size' : lang === 'ja' ? '文字サイズ' : '글씨 크기 조절'}
+              🔤 글씨 크기 조절
             </span>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
               <button 
@@ -797,10 +983,9 @@ export default function MemoApp({ dict, lang }: Props) {
             </div>
           </div>
 
-          {/* 2) 화면 모드 설정 행 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)' }}>
-              🌗 {lang === 'en' ? 'Screen Mode' : lang === 'ja' ? '画面モード' : '화면 모드'}
+              🌗 화면 모드
             </span>
             <button 
               className="font-btn" 
@@ -811,10 +996,9 @@ export default function MemoApp({ dict, lang }: Props) {
             </button>
           </div>
 
-          {/* 3) 로그인 / 회원 관리 행 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed var(--color-border)', paddingTop: 10 }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)' }}>
-              👤 {lang === 'en' ? 'Account' : lang === 'ja' ? 'アカウント' : '회원 로그인 및 백업'}
+              👤 회원 로그인 및 백업
             </span>
             {mounted && !authLoading && (
               user ? (
@@ -827,7 +1011,7 @@ export default function MemoApp({ dict, lang }: Props) {
                     onClick={signOut}
                     style={{ background: 'var(--color-accent)', color: '#fff', borderColor: 'var(--color-border)', padding: '4px 10px', fontSize: '0.8rem' }}
                   >
-                    {lang === 'en' ? 'Logout' : lang === 'ja' ? 'ログアウト' : '로그아웃'}
+                    로그아웃
                   </button>
                 </div>
               ) : (
@@ -839,14 +1023,13 @@ export default function MemoApp({ dict, lang }: Props) {
                   }}
                   style={{ background: '#1A1A1A', color: '#FFDE59', borderColor: '#1A1A1A', padding: '4px 14px', fontSize: '0.8rem' }}
                 >
-                  {lang === 'en' ? 'Login' : lang === 'ja' ? 'ログイン' : '로그인'}
+                  로그인
                 </button>
               )
             )}
           </div>
 
-          {/* 4) 프리미엄 업그레이드 배너 */}
-          {mounted && !authLoading && !isPremium && (
+          {!isPremium && (
             <div 
               onClick={() => {
                 setShowSettings(false);
@@ -854,33 +1037,32 @@ export default function MemoApp({ dict, lang }: Props) {
               }}
               style={{
                 background: 'linear-gradient(135deg, #FFFDF0 0%, #FFF2B2 100%)',
-                border: '2px solid #D4A96A',
+                border: '1px solid #D4A96A',
                 borderRadius: '8px',
                 padding: '12px 14px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 cursor: 'pointer',
-                boxShadow: '1px 1px 0 var(--color-border)',
                 marginTop: 4
               }}
             >
               <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                 <span style={{ fontSize: '0.85rem', fontWeight: 900, color: '#855E1A' }}>
-                  👑 {lang === 'en' ? 'Go Premium' : lang === 'ja' ? 'プレミアムにアップグレード' : '평생 이용권 구매하기'}
+                  👑 평생 이용권 구매하기
                 </span>
                 <span style={{ fontSize: '0.72rem', color: '#9E773B', fontWeight: 700 }}>
-                  {lang === 'en' ? 'Unlimited storage & safety sync' : lang === 'ja' ? '無制限保存＆安全同期' : '50개 제한 해제 및 철통 자동 클라우드 백업'}
+                  50개 제한 해제 및 철통 자동 클라우드 백업
                 </span>
               </div>
               <span style={{ fontSize: '1.2rem' }}>➔</span>
             </div>
           )}
           
-          {mounted && !authLoading && isPremium && (
+          {isPremium && (
             <div style={{
               background: '#FFF9E6',
-              border: '2px solid gold',
+              border: '1px solid gold',
               borderRadius: '8px',
               padding: '10px 14px',
               display: 'flex',
@@ -890,11 +1072,10 @@ export default function MemoApp({ dict, lang }: Props) {
               fontWeight: 'bold',
               color: '#B38F00'
             }}>
-              👑 {lang === 'en' ? 'You are a Premium Member!' : lang === 'ja' ? 'プレミアム会員입니다！' : '기억노트 평생 프리미엄 회원입니다 🌸'}
+              👑 기억노트 평생 프리미엄 회원입니다 🌸
             </div>
           )}
 
-          {/* 5) 설정창 닫기 전용 버튼 (부모님의 쉬운 조작을 보장하는 2중 장치!) */}
           <button
             onClick={() => setShowSettings(false)}
             style={{
@@ -902,20 +1083,16 @@ export default function MemoApp({ dict, lang }: Props) {
               padding: '12px',
               background: darkMode ? '#3A2F5D' : '#FFFFFF',
               color: darkMode ? '#E8DFFF' : '#3D2E6F',
-              border: darkMode ? '2px solid #E8DFFF' : '2px solid #3D2E6F',
+              border: darkMode ? '1px solid #E8DFFF' : '1px solid #3D2E6F',
               borderRadius: '10px',
               fontSize: '0.9rem',
               fontWeight: 900,
               cursor: 'pointer',
               textAlign: 'center',
-              marginTop: 4,
-              boxShadow: darkMode ? '2px 2px 0 #E8DFFF' : '2px 2px 0 #3D2E6F',
-              transition: 'transform 0.1s ease'
+              marginTop: 4
             }}
-            onMouseDown={(e) => (e.currentTarget.style.transform = 'translate(1px, 1px)')}
-            onMouseUp={(e) => (e.currentTarget.style.transform = 'none')}
           >
-            ⚙️ {lang === 'en' ? 'Close Settings (Done)' : lang === 'ja' ? '設定を閉じる (完了)' : '설정 완료 (닫기 ✕)'}
+            ⚙️ 설정 완료 (닫기 ✕)
           </button>
         </div>
       )}
@@ -923,15 +1100,15 @@ export default function MemoApp({ dict, lang }: Props) {
       {/* 🎁 자녀 대리 결제(효도 선물) 모드 상단 웰컴 배너 */}
       {isGiftMode && (
         <div style={{
-          background: '#FFF0F5', // 라벤더 블러쉬
-          borderBottom: '3px solid var(--color-border)',
+          background: '#FFF0F5',
+          borderBottom: '1px solid var(--color-border)',
           padding: '16px 20px',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           gap: 10,
           textAlign: 'center',
-          boxShadow: 'inset 0 -2px 5px rgba(0,0,0,0.05)'
+          zIndex: 100
         }}>
           <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900, color: '#C71585', display: 'flex', alignItems: 'center', gap: 6 }}>
             🌸 부모님을 위한 따뜻한 효도 선물 도착!
@@ -946,16 +1123,12 @@ export default function MemoApp({ dict, lang }: Props) {
               padding: '10px 24px',
               background: '#C71585',
               color: '#fff',
-              border: '2px solid var(--color-border)',
+              border: '1px solid var(--color-border)',
               borderRadius: '12px',
               fontWeight: 900,
               fontSize: '0.9rem',
-              cursor: 'pointer',
-              boxShadow: '3px 3px 0 var(--color-border)',
-              transition: 'transform 0.1s ease',
+              cursor: 'pointer'
             }}
-            onMouseDown={(e) => (e.currentTarget.style.transform = 'translate(2px, 2px)')}
-            onMouseUp={(e) => (e.currentTarget.style.transform = 'none')}
           >
             🎁 부모님께 1초 만에 평생권 선물하기
           </button>
@@ -978,8 +1151,8 @@ export default function MemoApp({ dict, lang }: Props) {
         </button>
       </nav>
 
-      <main style={{ flex: 1, overflowY: 'auto' }}>
-
+      {/* ====== 상단 65% 타임라인 스크롤 영역 ====== */}
+      <section className="timeline-section" style={{ height: isKeyboardOpen ? '100%' : '65%' }}>
         {/* ── 무한 일력 탭 ── */}
         {activeTab === 'timeline' && (
           <>
@@ -997,82 +1170,6 @@ export default function MemoApp({ dict, lang }: Props) {
               </div>
             </div>
 
-            {/* 🌸 [대표님 요금제 기획안 40~49개 작성 시 - 스마트 카운터 및 벚꽃 리마인더 배너 노출] */}
-            {!isPremium && memos.length >= 40 && memos.length < 50 && (
-              <div style={{
-                margin: '12px 16px 0',
-                padding: '16px',
-                background: '#FFF0F5', // 은은한 벚꽃 핑크
-                border: '2px solid var(--color-border)',
-                borderRadius: 'var(--radius)',
-                boxShadow: '3px 3px 0 var(--color-border)',
-                display: dismissBanner ? 'none' : 'flex',
-                flexDirection: 'column',
-                gap: 10,
-                animation: 'modalUp 0.2s ease'
-              }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontWeight: 800, fontSize: '0.88rem', color: '#C71585' }}>
-                    📝 {memos.length} / 50
-                  </span>
-                  <span style={{ fontSize: '1.1rem' }}>🌸</span>
-                </div>
-                <p style={{ fontSize: '0.85rem', margin: 0, fontWeight: 700, color: '#333', lineHeight: 1.4 }}>
-                  소중한 기억이 많이 쌓였어요. 공간이 곧 찰 것 같아요 🌸
-                </p>
-                <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                  <button 
-                    onClick={() => setDismissBanner(true)}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: '#fff',
-                      border: '2px solid var(--color-border)',
-                      borderRadius: '8px',
-                      fontSize: '0.78rem',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      boxShadow: '1px 1px 0 var(--color-border)'
-                    }}
-                  >
-                    지금은 괜찮아요
-                  </button>
-                  <button 
-                    onClick={() => {
-                      setDismissBanner(true);
-                      setShowPricing(true);
-                    }}
-                    style={{
-                      flex: 1,
-                      padding: '8px',
-                      background: '#FFDE59', // 노란 브루탈리스트 포인트
-                      border: '2px solid var(--color-border)',
-                      borderRadius: '8px',
-                      fontSize: '0.78rem',
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      boxShadow: '1px 1px 0 var(--color-border)'
-                    }}
-                  >
-                    공간 늘리기
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* 40~49개일 때 배너를 닫았더라도 상단에 작게 카운팅 노출 */}
-            {!isPremium && memos.length >= 40 && memos.length < 50 && dismissBanner && (
-              <div style={{
-                margin: '10px 16px 0',
-                fontSize: '0.8rem',
-                fontWeight: 'bold',
-                color: '#C71585',
-                textAlign: 'right'
-              }}>
-                📝 {memos.length} / 50
-              </div>
-            )}
-
             {/* 🔒 50개 가득 찼을 때 상단 오렌지색 경고 뱃지 */}
             {!isPremium && memos.length >= 50 && (
               <div 
@@ -1081,13 +1178,12 @@ export default function MemoApp({ dict, lang }: Props) {
                   margin: '12px 16px 0',
                   padding: '12px',
                   background: '#FFF4E5',
-                  border: '2px solid #F27A33',
+                  border: '1px solid #F27A33',
                   borderRadius: 'var(--radius)',
                   color: '#D05A10',
                   fontWeight: 'bold',
                   fontSize: '0.85rem',
                   textAlign: 'center',
-                  boxShadow: '2px 2px 0 var(--color-border)',
                   cursor: 'pointer'
                 }}
               >
@@ -1095,7 +1191,7 @@ export default function MemoApp({ dict, lang }: Props) {
               </div>
             )}
 
-            {/* 🔍 실시간 검색창 & 🏷️ 자동 카테고리 단추 (대표님 승인 A+C안) */}
+            {/* 🔍 실시간 검색창 & 조약돌 태그 바 */}
             <div id="search-filter-section">
               <div className="search-input-wrapper">
                 <span className="search-icon">🔍</span>
@@ -1103,36 +1199,25 @@ export default function MemoApp({ dict, lang }: Props) {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder={lang === 'en' ? 'Search for memories...' : lang === 'ja' ? '記憶を検索してください...' : '찾고 싶은 기억을 여기에 적어보세요...'}
+                  placeholder="찾고 싶은 기억을 여기에 적어보세요..."
                   aria-label="기억 검색"
                 />
                 {searchQuery && (
-                  <button id="btn-clear-search" onClick={() => setSearchQuery('')} aria-label="검색 지우기">❌</button>
+                  <button id="btn-clear-search" onClick={() => setSearchQuery('')} aria-label="검색 지우기">✕</button>
                 )}
               </div>
               <div className="category-tag-bar">
-                <button className={`tag-btn${categoryFilter === 'all' ? ' active' : ''}`} onClick={() => setCategoryFilter('all')}>
-                  {lang === 'en' ? 'All 📝' : lang === 'ja' ? 'すべて 📝' : '전체 📝'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'finance' ? ' active' : ''}`} onClick={() => setCategoryFilter('finance')}>
-                  {lang === 'en' ? 'Finance 💵' : lang === 'ja' ? '金融 💵' : '금융/돈 💵'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'meeting' ? ' active' : ''}`} onClick={() => setCategoryFilter('meeting')}>
-                  {lang === 'en' ? 'Meet 👥' : lang === 'ja' ? '約束 👥' : '약속/모임 👥'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'shopping' ? ' active' : ''}`} onClick={() => setCategoryFilter('shopping')}>
-                  {lang === 'en' ? 'Todo 🛒' : lang === 'ja' ? '買い物 🛒' : '장보기/할일 🛒'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'diary' ? ' active' : ''}`} onClick={() => setCategoryFilter('diary')}>
-                  {lang === 'en' ? 'Daily ✍️' : lang === 'ja' ? '日常 ✍️' : '일상/기록 ✍️'}
-                </button>
+                <button className={`tag-btn${categoryFilter === 'all' ? ' active' : ''}`} onClick={() => setCategoryFilter('all')}>전체 📝</button>
+                <button className={`tag-btn${categoryFilter === 'finance' ? ' active' : ''}`} onClick={() => setCategoryFilter('finance')}>금융/돈 💵</button>
+                <button className={`tag-btn${categoryFilter === 'meeting' ? ' active' : ''}`} onClick={() => setCategoryFilter('meeting')}>약속/모임 👥</button>
+                <button className={`tag-btn${categoryFilter === 'shopping' ? ' active' : ''}`} onClick={() => setCategoryFilter('shopping')}>장보기/할일 🛒</button>
+                <button className={`tag-btn${categoryFilter === 'diary' ? ' active' : ''}`} onClick={() => setCategoryFilter('diary')}>일상/기록 ✍️</button>
               </div>
             </div>
 
-            {/* 텍스트 입력 모달(인라인) */}
+            {/* 텍스트 입력 폼 (글씨로 적기 또는 마이크 보조창) */}
             {showInput && (
-              <div style={{ padding: '12px 16px', background: 'var(--bg-card)', borderBottom: '2px solid var(--color-border)' }}>
-                {/* 💡 "글씨로 적기" 모드용 친근한 오타 교정 안내 꿀팁 (대표님 피드백 완벽 매핑) */}
+              <div style={{ padding: '12px 16px', background: 'var(--bg-card)', borderBottom: '1px solid var(--color-border)' }}>
                 {!isVoiceMode && (
                   <div style={{ 
                     fontSize: '0.8rem', 
@@ -1151,13 +1236,12 @@ export default function MemoApp({ dict, lang }: Props) {
                   id="memo-textarea"
                   value={inputText}
                   onChange={e => setInputText(e.target.value)}
-                  placeholder={lang === 'en' ? 'Write down your precious memories...' : lang === 'ja' ? '大切な記憶を記録してください...' : '오늘 하루의 소중한 기억을 기록해 보세요...'}
+                  placeholder="오늘 하루의 소중한 기억을 기록해 보세요..."
                   autoFocus
                   rows={4}
                   style={{ fontSize: `${fontSize}px` }}
                 />
                 
-                {/* 🎙️ 음성 인식 보조 안내 및 다시 말하기 제어 영역 (대표님 피드백: "글씨로 적기" 모드 시에는 지저분한 음성 가이드와 다시 말하기 버튼을 완전히 보이지 않게 처리!) */}
                 {isVoiceMode && (
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 10px 0' }}>
                     <span style={{ fontSize: '0.78rem', color: 'var(--color-sub)' }}>
@@ -1183,11 +1267,10 @@ export default function MemoApp({ dict, lang }: Props) {
                   </div>
                 )}
 
-                {/* 🪄 AI 찰떡 교정 실행 단추 및 로딩 연출 (대표님 인사이트: 항상 제자리에 이쁘게 대기하여 UI 요동 방지!) */}
                 {isAiCorrecting ? (
                   <div style={{
                     background: '#FFF9E6',
-                    border: '2px dashed #D4AF37',
+                    border: '1px dashed #D4AF37',
                     borderRadius: '8px',
                     padding: '10px',
                     textAlign: 'center',
@@ -1209,13 +1292,12 @@ export default function MemoApp({ dict, lang }: Props) {
                         ? 'linear-gradient(135deg, #FFE5EC 0%, #FFB7B2 100%)' 
                         : '#F0F0F0',
                       color: inputText.trim() ? '#6F2E31' : '#A0A0A0',
-                      border: inputText.trim() ? '2.5px solid #FF8B94' : '2.5px solid #D0D0D0',
+                      border: inputText.trim() ? '1px solid #FF8B94' : '1px solid #D0D0D0',
                       borderRadius: '10px',
                       fontSize: '0.88rem',
                       fontWeight: 900,
                       cursor: inputText.trim() ? 'pointer' : 'not-allowed',
                       marginBottom: '10px',
-                      boxShadow: inputText.trim() ? '2px 2px 0 #FF8B94' : '2px 2px 0 #D0D0D0',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1223,8 +1305,6 @@ export default function MemoApp({ dict, lang }: Props) {
                       opacity: inputText.trim() ? 1 : 0.65,
                       transition: 'all 0.15s ease'
                     }}
-                    onMouseDown={(e) => inputText.trim() && (e.currentTarget.style.transform = 'translate(1px, 1px)')}
-                    onMouseUp={(e) => inputText.trim() && (e.currentTarget.style.transform = 'none')}
                   >
                     {voiceDict.aiPolishBtn}
                   </button>
@@ -1232,44 +1312,177 @@ export default function MemoApp({ dict, lang }: Props) {
 
                 <div className="modal-actions" style={{ flexDirection: 'row', gap: 8 }}>
                   <button className="btn-primary" style={{ flex: 1 }} onClick={saveMemo}>
-                    💾 {editingMemo ? (lang === 'en' ? 'Edit Complete' : lang === 'ja' ? '編集完了' : '수정 완료') : (lang === 'en' ? 'Save' : lang === 'ja' ? '保存' : '저장')}
+                    💾 {editingMemo ? '수정 완료' : '저장'}
                   </button>
                   <button className="btn-secondary" onClick={cancelMemo}>
-                    {lang === 'en' ? 'Cancel' : lang === 'ja' ? 'キャンセル' : '취소'}
+                    취소
                   </button>
                 </div>
               </div>
             )}
 
             <div id="memo-list" className="memo-container">
+              {/* 🧠 AI 당일 일정 리마인더 배너 출력 */}
+              {scheduledReminders.map(rem => {
+                const now = new Date();
+                const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+                // 당일 약속 매칭 및 닫지 않은 리마인더만 렌더링!
+                if (rem.targetDate === todayStr && !dismissedReminders.has(rem.id)) {
+                  return (
+                    <div key={rem.id} className="reminder-banner">
+                      <div className="reminder-content">
+                        <span className="reminder-icon">⏰</span>
+                        <div className="reminder-text-wrapper">
+                          <span className="reminder-badge">오늘의 약속</span>
+                          <span className="reminder-title">{rem.content}</span>
+                          <span className="reminder-desc">기억노트가 알려드려요! 소중한 약속이 오늘 있으니 꼭 기억하세요 🌸</span>
+                        </div>
+                      </div>
+                      <button 
+                        className="btn-close-reminder" 
+                        onClick={() => setDismissedReminders(prev => {
+                          const next = new Set(prev);
+                          next.add(rem.id);
+                          return next;
+                        })}
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  );
+                }
+                return null;
+              })}
+
+              {/* 🪜 스토리보드 5단계 점진적 피처 가이드 카드 렌더링 */}
+              {/* [1단계] 첫 실행: 메모가 0개일 때 */}
+              {memos.length === 0 && !dismissedGuides.has('guide-step-1') && (
+                <div className="guide-card">
+                  <div className="guide-card-header">
+                    <span className="guide-card-title">🌸 기억노트에 오신 것을 환영합니다!</span>
+                    <button className="btn-close-guide" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-1'))}>✕</button>
+                  </div>
+                  <div className="guide-card-content">
+                    반갑습니다! 기억노트와 함께 매일의 소소하지만 소중한 생각과 하루 일상을 적어보세요.<br />
+                    키보드로 입력하지 않고 <strong>아래 하단 영역(마이크 그림)</strong>을 가볍게 누른 뒤 편하게 말씀하셔도 글자가 저절로 적힙니다. 지금 첫 메모를 시작해보세요! 😊
+                  </div>
+                </div>
+              )}
+
+              {/* [2단계] 메모 3회 이상: 별표 기능 꿀팁 */}
+              {memos.length >= 3 && !dismissedGuides.has('guide-step-2') && (
+                <div className="guide-card">
+                  <div className="guide-card-header">
+                    <span className="guide-card-title">⭐ 꼭 기억할 중요한 추억은 별표를 달아보세요!</span>
+                    <button className="btn-close-guide" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-2'))}>✕</button>
+                  </div>
+                  <div className="guide-card-content">
+                    메모가 예쁘게 쌓이고 있네요! 혹시 나중에 빠르게 찾아보고 싶은 중요한 은행 계좌번호나 모임 약속이 있으신가요?<br />
+                    메모 카드 오른쪽 위의 <strong>별표(⭐) 단추</strong>를 누르면, 상단 '⭐ 별표 보관함' 탭에 따로 모아서 볼 수 있어요! 💡
+                  </div>
+                  <div className="guide-card-actions">
+                    <button className="guide-btn-accent" onClick={() => {
+                      setActiveTab('archive');
+                      setDismissedGuides(prev => new Set(prev).add('guide-step-2'));
+                    }}>별표 보관함 가보기 ➔</button>
+                  </div>
+                </div>
+              )}
+
+              {/* [3단계] 메모 10회 이상: AI 분류 제안 */}
+              {memos.length >= 10 && !dismissedGuides.has('guide-step-3') && (
+                <div className="guide-card">
+                  <div className="guide-card-header">
+                    <span className="guide-card-title">🤖 AI 지능형 카테고리 태그 바가 활성화되었습니다!</span>
+                    <button className="btn-close-guide" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-3'))}>✕</button>
+                  </div>
+                  <div className="guide-card-content">
+                    축하합니다! 소중한 추억이 10개 이상 등록되어, AI가 메모 내용을 분석해 <strong>[금융/돈 💵], [약속/모임 👥], [장보기/할일 🛒]</strong> 등으로 지능형 분류를 제공합니다.<br />
+                    위의 조약돌 단추들을 눌러서 메모들을 주제별로 쏙쏙 간편하게 모아 보세요! 어떠신가요?
+                  </div>
+                  <div className="guide-card-actions">
+                    <button className="guide-btn-accent" onClick={() => {
+                      setCategoryFilter('meeting');
+                      setDismissedGuides(prev => new Set(prev).add('guide-step-3'));
+                      alert('👥 약속/모임 메모만 필터링해 보았어요! 조약돌 단추로 카테고리를 바꿔보세요.');
+                    }}>좋아요 👍</button>
+                    <button className="guide-btn-sub" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-3'))}>괜찮아요 ✕</button>
+                  </div>
+                </div>
+              )}
+
+              {/* [4단계] 별표 3개 이상: 가족 공유 제안 */}
+              {starredIds.size >= 3 && !dismissedGuides.has('guide-step-4') && (
+                <div className="guide-card">
+                  <div className="guide-card-header">
+                    <span className="guide-card-title">🌸 소중한 기억을 자녀나 가족에게 전송해볼까요?</span>
+                    <button className="btn-close-guide" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-4'))}>✕</button>
+                  </div>
+                  <div className="guide-card-content">
+                    중요하게 별표해 둔 메모가 3개나 모였습니다! 가족들과 나누고 싶은 재미있는 에피소드나 잊지 말아야 할 대소사가 있다면,<br />
+                    메모 카드의 <strong>[👤 공유]</strong> 단추를 눌러 카카오톡으로 자녀에게 즉시 전송해보세요. 가족이 더 많이 기뻐할 것입니다! 🌸
+                  </div>
+                </div>
+              )}
+
+              {/* [5단계] 메모 40개 도달: 평생 무제한 저장 안내 (차단 없음) */}
+              {memos.length >= 40 && !dismissedGuides.has('guide-step-5') && !isPremium && (
+                <div className="guide-card" style={{ background: '#FFFDF0', borderColor: '#F2C363' }}>
+                  <div className="guide-card-header">
+                    <span className="guide-card-title" style={{ color: '#A17A00' }}>👑 추억 저장 공간을 무제한으로 넓혀보세요</span>
+                    <button className="btn-close-guide" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-5'))}>✕</button>
+                  </div>
+                  <div className="guide-card-content">
+                    벌써 40개 이상의 소중한 기록이 기억노트에 안전하게 저장되었습니다!<br />
+                    무료 회원은 50개까지 저장이 가능하며, 평생권 이용 시 <strong>무제한 영구 보관</strong> 및 <strong>기기 고장 시 안전 복원용 자동 클라우드 백업</strong>이 영원히 활성화됩니다.
+                  </div>
+                  <div className="guide-card-actions">
+                    <button className="guide-btn-accent" style={{ background: '#D4AF37' }} onClick={() => {
+                      setShowPricing(true);
+                      setDismissedGuides(prev => new Set(prev).add('guide-step-5'));
+                    }}>평생권 알아보기 👑</button>
+                    <button className="guide-btn-sub" onClick={() => setDismissedGuides(prev => new Set(prev).add('guide-step-5'))}>나중에 하기 ✕</button>
+                  </div>
+                </div>
+              )}
+
+              {/* 40~49개일 때 배너를 닫았더라도 상단에 작게 카운팅 노출 */}
+              {!isPremium && memos.length >= 40 && memos.length < 50 && dismissBanner && (
+                <div style={{
+                  fontSize: '0.8rem',
+                  fontWeight: 'bold',
+                  color: '#C71585',
+                  textAlign: 'right',
+                  paddingRight: 4
+                }}>
+                  📝 {memos.length} / 50 개의 메모가 저장되었습니다
+                </div>
+              )}
+
               {filteredMemos.length === 0 && (
                 <div className="empty-hint">
                   <p>
                     {isSearchingOrFiltering ? (
-                      lang === 'en' ? '🔍 No matching memories.' :
-                      lang === 'ja' ? '🔍 一致する記憶がありません。' :
                       '🔍 일치하는 기억이 없습니다.'
                     ) : (
-                      lang === 'en' ? '✍️ Record your first memory today!' :
-                      lang === 'ja' ? '✍️ 今日の最初の記憶を記録してみましょう！' :
-                      '✍️ 아래 버튼을 눌러 첫 번째 소중한 기억을 남겨보세요!'
+                      '✍️ 아래 마이크 버튼을 누르고 편하게 말씀해 보세요!\n글씨가 저절로 정갈하게 적힙니다. 🌸'
                     )}
                   </p>
                 </div>
               )}
               {filteredMemos.map(memo => (
-                <div key={memo.id} className={`memo-card${starredIds.has(memo.id) ? ' starred' : ''}`}>
+                <div key={memo.id} className="memo-card">
                   <div className="memo-card-top">
                     <span className="memo-time">{memo.time}</span>
                     <div className="memo-card-actions">
                       <button className={`btn-star${starredIds.has(memo.id) ? ' active' : ''}`}
                         onClick={() => toggleStar(memo.id)}
                       >⭐</button>
-                      <button className="btn-edit-card" onClick={() => startEdit(memo)}>✏️ {dict.actions.edit}</button>
+                      <button className="btn-edit-card" onClick={() => startEdit(memo)}>✏️ 수정</button>
                       <button
                         className="btn-share-card"
                         onClick={() => setCurrentShare(memo)}
-                      >👤 {dict.actions.share}</button>
+                      >👤 공유</button>
                     </div>
                   </div>
                   <div className="memo-text" style={{ fontSize: `${fontSize}px` }}>{renderHighlightedText(memo.text, searchQuery)}</div>
@@ -1287,7 +1500,6 @@ export default function MemoApp({ dict, lang }: Props) {
               <p className="view-subtitle">{dict.archive.subtitle}</p>
             </div>
             
-            {/* 별표 보관함 탭 내에서도 실시간 검색 및 카테고리 태그 바 완벽 작동 */}
             <div id="search-filter-section">
               <div className="search-input-wrapper">
                 <span className="search-icon">🔍</span>
@@ -1295,29 +1507,19 @@ export default function MemoApp({ dict, lang }: Props) {
                   type="text"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
-                  placeholder={lang === 'en' ? 'Search for memories...' : lang === 'ja' ? '記憶を検索してください...' : '찾고 싶은 기억을 여기에 적어보세요...'}
+                  placeholder="별표 보관함 내 기억 검색..."
                   aria-label="기억 검색"
                 />
                 {searchQuery && (
-                  <button id="btn-clear-search" onClick={() => setSearchQuery('')} aria-label="검색 지우기">❌</button>
+                  <button id="btn-clear-search" onClick={() => setSearchQuery('')} aria-label="검색 지우기">✕</button>
                 )}
               </div>
               <div className="category-tag-bar">
-                <button className={`tag-btn${categoryFilter === 'all' ? ' active' : ''}`} onClick={() => setCategoryFilter('all')}>
-                  {lang === 'en' ? 'All 📝' : lang === 'ja' ? 'すべて 📝' : '전체 📝'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'finance' ? ' active' : ''}`} onClick={() => setCategoryFilter('finance')}>
-                  {lang === 'en' ? 'Finance 💵' : lang === 'ja' ? '金融 💵' : '금융/돈 💵'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'meeting' ? ' active' : ''}`} onClick={() => setCategoryFilter('meeting')}>
-                  {lang === 'en' ? 'Meet 👥' : lang === 'ja' ? '約束 👥' : '약속/모임 👥'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'shopping' ? ' active' : ''}`} onClick={() => setCategoryFilter('shopping')}>
-                  {lang === 'en' ? 'Todo 🛒' : lang === 'ja' ? '買い物 🛒' : '장보기/할일 🛒'}
-                </button>
-                <button className={`tag-btn${categoryFilter === 'diary' ? ' active' : ''}`} onClick={() => setCategoryFilter('diary')}>
-                  {lang === 'en' ? 'Daily ✍️' : lang === 'ja' ? '日常 ✍️' : '일상/기록 ✍️'}
-                </button>
+                <button className={`tag-btn${categoryFilter === 'all' ? ' active' : ''}`} onClick={() => setCategoryFilter('all')}>전체 📝</button>
+                <button className={`tag-btn${categoryFilter === 'finance' ? ' active' : ''}`} onClick={() => setCategoryFilter('finance')}>금융/돈 💵</button>
+                <button className={`tag-btn${categoryFilter === 'meeting' ? ' active' : ''}`} onClick={() => setCategoryFilter('meeting')}>약속/모임 👥</button>
+                <button className={`tag-btn${categoryFilter === 'shopping' ? ' active' : ''}`} onClick={() => setCategoryFilter('shopping')}>장보기/할일 🛒</button>
+                <button className={`tag-btn${categoryFilter === 'diary' ? ' active' : ''}`} onClick={() => setCategoryFilter('diary')}>일상/기록 ✍️</button>
               </div>
             </div>
 
@@ -1326,8 +1528,6 @@ export default function MemoApp({ dict, lang }: Props) {
                 <div className="empty-hint">
                   <p>
                     {isSearchingOrFiltering ? (
-                      lang === 'en' ? '🔍 No matching starred memories.' :
-                      lang === 'ja' ? '🔍 一致する星マーク의 記憶がありません。' :
                       '🔍 일치하는 별표 기억이 없습니다.'
                     ) : (
                       dict.archive.empty
@@ -1339,7 +1539,7 @@ export default function MemoApp({ dict, lang }: Props) {
                   <div key={memo.id} className="star-card">
                     <div className="star-card-top">
                       <span className="star-card-date">{memo.dateKey} {memo.time}</span>
-                      <button className="btn-edit-star-card" onClick={() => startEdit(memo)}>✏️ {dict.actions.edit}</button>
+                      <button className="btn-edit-star-card" onClick={() => startEdit(memo)}>✏️ 수정</button>
                     </div>
                     <div className="memo-text" style={{ fontSize: `${fontSize}px` }}>{renderHighlightedText(memo.text, searchQuery)}</div>
                   </div>
@@ -1348,60 +1548,44 @@ export default function MemoApp({ dict, lang }: Props) {
             </div>
           </>
         )}
-      </main>
+      </section>
 
-      {/* ====== 하단 고정 액션 바 ====== */}
-      {!isKeyboardOpen && (
-        <div id="action-bar" style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-          <div style={{ display: 'flex', gap: '10px', width: '100%', alignItems: 'stretch' }}>
-            {/* 말로 적기 버튼 열 */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <button
-                className="action-btn primary"
-                style={{ width: '100%' }}
-                onClick={() => {
-                  // 대표님 마케팅 승인안: 보이스 메모도 전체 50개 용량 쿼터에 똑같이 포함하여 50건 이하 시 전면 무료 제공!
-                  if (isPremium || memos.length < 50) {
-                    setIsVoiceMode(true); // 말로 적기(음성) 모드로 지정
-                    // 거슬리는 alert 팝업을 완전히 없애고, 즉시 입력창(showInput)을 화사하게 열고 음성인식 기동!
-                    setShowInput(true);
-                    startSpeechRecognition();
-                    setTimeout(() => {
-                      const el = document.getElementById('memo-textarea');
-                      if (el) el.focus();
-                    }, 80);
-                  } else {
-                    // 50건 가득 채운 무료 유저에게만 아름다운 기억공간 락 모달을 오픈하여 결제 유도
-                    setShowLimitModal(true);
-                  }
-                }}
-              >
-                🎙️ {dict.actions.voice}
-              </button>
-              {/* 💬 대표님 요건: 마이크 아이콘 없이, 말로적기 버튼 아래에 정확히 수직 배치 */}
-              <span style={{ 
-                fontSize: '0.78rem', 
-                color: 'var(--color-sub)', 
-                fontWeight: 800, 
-                letterSpacing: '-0.01em',
-                opacity: 0.85,
-                textAlign: 'center'
-              }}>
-                {dict.actions.voice_hint}
-              </span>
-            </div>
-
-            {/* 글씨로 적기 버튼 열 */}
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-              <button className="action-btn" style={{ width: '100%' }} onClick={handleOpenInput}>
-                ✏️ {dict.actions.text}
-              </button>
-              {/* 💡 양쪽 열의 완벽한 높이 대칭(정렬)을 위한 투명 여백 */}
-              <span style={{ fontSize: '0.78rem', visibility: 'hidden', userSelect: 'none' }}>&nbsp;</span>
+      {/* ====== 하단 35% '자이언트 음성 존' (모바일 가상 키보드 활성화 시 숨김) ====== */}
+      <section className={`voice-zone ${isKeyboardOpen ? 'keyboard-hidden' : ''}`} style={{ height: isKeyboardOpen ? '0%' : '35%' }}>
+        <div className="giant-mic-container">
+          <div 
+            className={`giant-mic-outer ${isListening ? 'recording' : ''}`}
+            onClick={() => {
+              if (isListening) {
+                // 이미 인식 중이면 안전하게 수동 종료
+                setIsListening(false);
+              } else {
+                if (isPremium || memos.length < 50) {
+                  setIsVoiceMode(true);
+                  setShowInput(true);
+                  startSpeechRecognition();
+                  setTimeout(() => {
+                    const el = document.getElementById('memo-textarea');
+                    if (el) el.focus();
+                  }, 80);
+                } else {
+                  setShowLimitModal(true);
+                }
+              }
+            }}
+          >
+            <div className="giant-mic-inner">
+              {isListening ? '⏹️' : '🎙️'}
             </div>
           </div>
         </div>
-      )}
+        <div className="voice-guide-text">
+          {isListening ? '듣고 있어요! 편하게 말씀하세요' : '여기 누르고 말씀하세요'}
+        </div>
+        <div className="voice-sub-text">
+          {isListening ? '말씀을 끝내시면 [저장] 단추를 눌러주세요 🌸' : '손가락 어디든 가볍게 닿으면 마술처럼 시작돼요'}
+        </div>
+      </section>
 
       {/* ====== 공유 모달 ====== */}
       <ShareModal
@@ -1434,12 +1618,9 @@ export default function MemoApp({ dict, lang }: Props) {
         />
       )}
 
-      {/* ─────────────────────────────────────────────────────────────
-          🔒 [대표님 기획안 요건: 50개 도달 시 팝업되는 차단 안내 모달]
-         ───────────────────────────────────────────────────────────── */}
+      {/* 🔒 50개 용량 도달 시 차단 팝업 모달 */}
       {showLimitModal && (
         <>
-          {/* 오버레이 */}
           <div 
             onClick={() => setShowLimitModal(false)} 
             style={{
@@ -1450,7 +1631,6 @@ export default function MemoApp({ dict, lang }: Props) {
             }} 
           />
 
-          {/* 모달 창 */}
           <div style={{
             position: 'fixed',
             top: '50%', left: '50%',
@@ -1458,7 +1638,7 @@ export default function MemoApp({ dict, lang }: Props) {
             width: '92%',
             maxWidth: '430px',
             background: 'var(--bg-card)',
-            border: '3px solid var(--color-border)',
+            border: '1px solid var(--color-border)',
             borderRadius: 'var(--radius)',
             padding: '24px 20px',
             boxShadow: 'var(--shadow-modal)',
@@ -1467,7 +1647,6 @@ export default function MemoApp({ dict, lang }: Props) {
             color: 'var(--color-text)',
             boxSizing: 'border-box'
           }}>
-            {/* 상단 닫기 단추 */}
             <button 
               onClick={() => setShowLimitModal(false)}
               style={{
@@ -1479,7 +1658,6 @@ export default function MemoApp({ dict, lang }: Props) {
               ✕
             </button>
 
-            {/* 헤더 */}
             <div style={{ textAlign: 'center', marginBottom: 20 }}>
               <span style={{ fontSize: '2.5rem', display: 'block', marginBottom: '6px' }}>🌸</span>
               <h3 style={{ fontSize: '1.3rem', fontWeight: 900, margin: '0 0 8px 0', color: 'var(--color-text)' }}>
@@ -1487,20 +1665,17 @@ export default function MemoApp({ dict, lang }: Props) {
               </h3>
               <p style={{ fontSize: '0.85rem', color: '#666', margin: 0, lineHeight: 1.4, fontWeight: 700 }}>
                 <span style={{ color: '#E53935' }}>50개의 메모가 이 기기에만 저장되어 있어요. ⚠️</span><br />
-                기기를 분실하거나 고장 나면 소중한 추억이<br />
-                사라질 수 있습니다. 🌸<br />
+                기기를 분실하거나 고장 나면 소중한 추억이 사라질 수 있습니다. 🌸<br />
                 안전하게 클라우드에 연동하고 저장 공간을 넓혀주세요.
               </p>
             </div>
 
-            {/* 요금제 리스트 (이전 둥근 개별 카드 디자인 복원) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20 }}>
               
-              {/* 👑 평생 이용권 (강조 카드) */}
               <div 
                 onClick={() => setLimitSelectedPlan('lifetime')}
                 style={{
-                  border: limitSelectedPlan === 'lifetime' ? '3px solid #D4AF37' : '2px solid var(--color-border)',
+                  border: limitSelectedPlan === 'lifetime' ? '3px solid #D4AF37' : '1px solid var(--color-border)',
                   borderRadius: '12px',
                   padding: '14px 16px',
                   background: limitSelectedPlan === 'lifetime' ? '#FFFDF0' : 'var(--bg-input)',
@@ -1510,12 +1685,11 @@ export default function MemoApp({ dict, lang }: Props) {
                   transition: 'all 0.15s ease',
                 }}
               >
-                {/* 추천 뱃지 */}
                 <span style={{
                   position: 'absolute', top: -10, right: 14,
                   background: '#D4AF37', color: '#fff', fontSize: '0.68rem',
                   fontWeight: 900, padding: '2px 8px', borderRadius: '20px',
-                  border: '1.5px solid var(--color-border)'
+                  border: '1px solid var(--color-border)'
                 }}>
                   ★ 강력 추천 • 평생 소장
                 </span>
@@ -1536,11 +1710,10 @@ export default function MemoApp({ dict, lang }: Props) {
                 </div>
               </div>
 
-              {/* 📅 연간 이용권 */}
               <div 
                 onClick={() => setLimitSelectedPlan('annual')}
                 style={{
-                  border: limitSelectedPlan === 'annual' ? '3px solid var(--color-accent)' : '2px solid var(--color-border)',
+                  border: limitSelectedPlan === 'annual' ? '3px solid var(--color-accent)' : '1px solid var(--color-border)',
                   borderRadius: '12px',
                   padding: '12px 16px',
                   background: limitSelectedPlan === 'annual' ? '#F0F8FF' : 'var(--bg-input)',
@@ -1564,11 +1737,10 @@ export default function MemoApp({ dict, lang }: Props) {
                 </div>
               </div>
 
-              {/* 🌙 월간 이용권 */}
               <div 
                 onClick={() => setLimitSelectedPlan('monthly')}
                 style={{
-                  border: limitSelectedPlan === 'monthly' ? '3px solid var(--color-accent)' : '2px solid var(--color-border)',
+                  border: limitSelectedPlan === 'monthly' ? '3px solid var(--color-accent)' : '1px solid var(--color-border)',
                   borderRadius: '12px',
                   padding: '12px 16px',
                   background: limitSelectedPlan === 'monthly' ? '#F0F8FF' : 'var(--bg-input)',
@@ -1594,64 +1766,52 @@ export default function MemoApp({ dict, lang }: Props) {
 
             </div>
 
-            {/* 버튼 그룹 (1. 구글 직접 결제 / 2. 자녀에게 부탁하기) */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              
-              {/* 👤 구글 직접 결제 */}
               <button
                 onClick={handleLimitAction}
                 style={{
                   width: '100%',
                   padding: '15px',
-                  background: '#FFFFFF', // 모던 화이트/그레이
+                  background: '#FFFFFF',
                   color: '#1A1A1A',
-                  border: '2px solid var(--color-border)',
+                  border: '1px solid var(--color-border)',
                   borderRadius: '14px',
                   fontSize: '1rem',
                   fontWeight: 900,
                   cursor: 'pointer',
-                  boxShadow: '4px 4px 0 var(--color-border)',
+                  boxShadow: 'var(--shadow)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 8,
-                  transition: 'transform 0.1s ease',
+                  gap: 8
                 }}
-                onMouseDown={(e) => (e.currentTarget.style.transform = 'translate(2px, 2px)')}
-                onMouseUp={(e) => (e.currentTarget.style.transform = 'none')}
               >
                 {user ? '💳 선택한 요금제로 결제하기' : '👤 구글 계정으로 시작하기'}
               </button>
 
-              {/* 💬 자녀에게 부탁하기 (카카오톡 공식 옐로우 & 초코브라운 테마) */}
               <button
                 onClick={handleLimitShareGift}
                 style={{
                   width: '100%',
                   padding: '15px',
-                  background: '#FEE500', // 카카오 공식 노랑
-                  color: '#3A1D1D', // 카카오 공식 초코브라운
-                  border: '2px solid #3A1D1D',
+                  background: '#FEE500',
+                  color: '#3A1D1D',
+                  border: '1px solid #3A1D1D',
                   borderRadius: '14px',
                   fontSize: '1rem',
                   fontWeight: 900,
                   cursor: 'pointer',
-                  boxShadow: '4px 4px 0 #3A1D1D',
+                  boxShadow: 'var(--shadow)',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  gap: 8,
-                  transition: 'transform 0.1s ease',
+                  gap: 8
                 }}
-                onMouseDown={(e) => (e.currentTarget.style.transform = 'translate(2px, 2px)')}
-                onMouseUp={(e) => (e.currentTarget.style.transform = 'none')}
               >
                 💬 카카오톡으로 자녀에게 부탁하기
               </button>
-
             </div>
 
-            {/* 하단 ✕ 닫기 단추 */}
             <button
               onClick={() => setShowLimitModal(false)}
               style={{
@@ -1671,7 +1831,6 @@ export default function MemoApp({ dict, lang }: Props) {
           </div>
         </>
       )}
-
     </div>
   );
 }
