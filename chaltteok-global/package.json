@@ -19,11 +19,13 @@
     "@stripe/stripe-js": "^9.5.0",
     "@supabase/ssr": "^0.10.3",
     "@supabase/supabase-js": "^2.105.4",
+    "@types/web-push": "^3.6.4",
     "negotiator": "^1.0.0",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",
-    "stripe": "^22.1.1"
+    "stripe": "^22.1.1",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "@types/negotiator": "^0.6.4",

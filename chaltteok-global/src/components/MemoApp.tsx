@@ -7,6 +7,8 @@ import AuthModal from '@/components/AuthModal';
 import PricingModal from '@/components/PricingModal';
 import { useAuth, useSubscription, useMemos } from '@/hooks/useMemos';
 import { createClient } from '@/lib/supabase/client';
+import { subscribeToPush, scheduleReminder, analyzeTravelType } from '@/lib/pushUtils';
+
 
 /* ────────────────────────────────
    타입 정의
@@ -112,6 +114,8 @@ export default function MemoApp({ dict, lang }: Props) {
 
 
   const [mounted, setMounted] = useState(false);
+  const [deviceId, setDeviceId] = useState<string>('');        // 📱 기기 고유 ID
+  const [pushReady, setPushReady] = useState(false);           // 📱 Push 구독 완료 여부
   const [activeTab, setActiveTab] = useState<'timeline' | 'archive'>('timeline');
   const [fontSize, setFontSize] = useState(18);
   const [darkMode, setDarkMode] = useState(false);
@@ -567,7 +571,32 @@ export default function MemoApp({ dict, lang }: Props) {
   const isSearchingOrFiltering = searchQuery.trim() !== '' || categoryFilter !== 'all';
 
   // 클라이언트 마운트 완료 감지 (Hydration mismatch 방지)
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true);
+
+    // 📱 기기 고유 ID 생성 (없으면 새로 발급, localStorage에 영구 저장)
+    let id = localStorage.getItem('chaltteok_device_id');
+    if (!id) {
+      id = `dev-${Date.now()}-${Math.random().toString(36).substring(2, 10)}`;
+      localStorage.setItem('chaltteok_device_id', id);
+    }
+    setDeviceId(id);
+
+    // 📲 Push 알림 구독 자동 등록 (이미 구독한 경우 재시도 없이 통과)
+    const alreadySubscribed = localStorage.getItem('chaltteok_push_subscribed');
+    if (!alreadySubscribed) {
+      // 약간 지연 후 실행 (앱 로딩 완료 후 권한 요청하여 UX 개선)
+      setTimeout(async () => {
+        const ok = await subscribeToPush(id!);
+        if (ok) {
+          localStorage.setItem('chaltteok_push_subscribed', '1');
+          setPushReady(true);
+        }
+      }, 3000);
+    } else {
+      setPushReady(true);
+    }
+  }, []);
 
   // 📱 모바일 가상 키보드 팝업 감지 및 body 패딩 동적 제어 (대표님 피드백: 키보드가 입력 영역을 가리는 현상 완벽 방어!)
   useEffect(() => {
@@ -896,13 +925,45 @@ export default function MemoApp({ dict, lang }: Props) {
           ...prev,
           { id: newMemo.id, targetDate: extracted.targetDate, content: extracted.content }
         ]);
-        alert(`⏰ 리마인더 일정이 자동으로 등록되었습니다!\n📅 약속 날짜: ${extracted.targetDate}\n📌 내용: ${extracted.content}`);
+
+        // 📲 스마트 이동 유형 분석 + 잠금화면 푸시 알림 예약!
+        const travelType = analyzeTravelType(memoText);
+
+        // 메모 텍스트에서 시간(HH:MM) 추출 시도
+        const timeMatch = memoText.match(/(\d{1,2})\s*[:시]\s*(\d{2})\s*분?/);
+        let appointmentTime: string | undefined;
+        if (timeMatch) {
+          const h = timeMatch[1].padStart(2, '0');
+          const m = timeMatch[2].padStart(2, '0');
+          appointmentTime = `${h}:${m}`;
+        }
+
+        if (deviceId) {
+          await scheduleReminder({
+            deviceId,
+            userId: user?.id,
+            memoId: newMemo.id,
+            memoText,
+            appointmentDate: extracted.targetDate,
+            appointmentTime,
+            travelType,
+          });
+        }
+
+        const travelLabel: Record<string, string> = {
+          local: '🏘️ 동네 약속',
+          city: '🏙️ 시내 약속',
+          intercity_train: '🚄 타도시 (기차) - 전날 오후 6시 또는 4시간 전 알림',
+          intercity_bus: '🚌 타도시 (버스) - 전날 오후 6시 또는 5시간 전 알림',
+          overseas: '✈️ 해외 일정 - 전날 오후 6시 알림',
+        };
+        alert(`⏰ 리마인더가 등록되었습니다!\n📅 약속 날짜: ${extracted.targetDate}\n📌 내용: ${extracted.content}\n🗺️ 유형: ${travelLabel[travelType] || travelType}`);
       }
     }
     setInputText('');
     setIsVoiceUsed(false); // 🎙️ 음성 사용 이력 안전하게 리셋
     setShowInput(false);
-  }, [inputText, editingMemo, TODAY_KEY, isPremium, memos.length, user, addMemo, updateMemo, lang, isVoiceUsed, extractReminderFromText]);
+  }, [inputText, editingMemo, TODAY_KEY, isPremium, memos.length, user, addMemo, updateMemo, lang, isVoiceUsed, extractReminderFromText, deviceId]);
 
   /* 수정 취소 */
   const cancelMemo = useCallback(() => {
