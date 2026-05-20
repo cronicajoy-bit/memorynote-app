@@ -169,6 +169,72 @@ export default function MemoApp({ dict, lang }: Props) {
     return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || "";
   };
 
+  /* 📅 날짜 키워드 → 실제 날짜 문자열 자동 변환 (예: "내일 병원 약속" → "5월 21일(수요일) 병원 약속") */
+  const rewriteDateKeywords = (text: string): string => {
+    const now = new Date();
+    const KO_DAYS = ['일', '월', '화', '수', '목', '금', '토'];
+
+    // 날짜 객체 → "M월 D일(요일)" 형식 문자열
+    const formatDateLabel = (d: Date): string => {
+      return `${d.getMonth() + 1}월 ${d.getDate()}일(${KO_DAYS[d.getDay()]})`;
+    };
+
+    let result = text;
+
+    // 1) "오늘" 키워드
+    result = result.replace(/오늘(날|에|은|도)?/g, () => formatDateLabel(now));
+
+    // 2) "내일" 키워드
+    result = result.replace(/내일(날|에|은|도)?/g, () => {
+      const d = new Date(now);
+      d.setDate(now.getDate() + 1);
+      return formatDateLabel(d);
+    });
+
+    // 3) "모레" 키워드
+    result = result.replace(/모레(날|에|은|도)?/g, () => {
+      const d = new Date(now);
+      d.setDate(now.getDate() + 2);
+      return formatDateLabel(d);
+    });
+
+    // 4) "글피" 키워드 (모레 다음날)
+    result = result.replace(/글피(날|에|은|도)?/g, () => {
+      const d = new Date(now);
+      d.setDate(now.getDate() + 3);
+      return formatDateLabel(d);
+    });
+
+    // 5) "M월 D일" 패턴 → 요일 자동 추가 (예: "5월 25일" → "5월 25일(일)")
+    // 이미 요일이 붙어 있지 않을 때만 변환
+    result = result.replace(/(\d+)\s*월\s*(\d+)\s*일(?!\s*\([일월화수목금토]\))/g, (match, m, d) => {
+      const month = parseInt(m);
+      const day = parseInt(d);
+      let year = now.getFullYear();
+      if (month - 1 < now.getMonth()) year += 1; // 이미 지난 월이면 내년
+      const targetDate = new Date(year, month - 1, day);
+      return `${month}월 ${day}일(${KO_DAYS[targetDate.getDay()]})`;
+    });
+
+    // 6) "D일" 단독 패턴 → "M월 D일(요일)" 완성 (스마트 이번달/다음달 룰 적용)
+    // "월" 없이 숫자+일만 있는 경우 (앞에 "월"이 없어야 함)
+    result = result.replace(/(?<!\d\s*월\s*)(?<!\d)\b(\d{1,2})\s*일\b(?!\s*\([일월화수목금토]\))/g, (match, dayStr) => {
+      const day = parseInt(dayStr);
+      if (day < 1 || day > 31) return match; // 유효하지 않은 숫자는 무시
+      let targetMonth = now.getMonth();
+      let targetYear = now.getFullYear();
+      if (day < now.getDate()) {
+        // 오늘 이전 일자 → 다음 달
+        targetMonth += 1;
+        if (targetMonth > 11) { targetMonth = 0; targetYear += 1; }
+      }
+      const targetDate = new Date(targetYear, targetMonth, day);
+      return `${targetMonth + 1}월 ${day}일(${KO_DAYS[targetDate.getDay()]})`;
+    });
+
+    return result;
+  };
+
   /* 🧠 [AI & 로컬 하이브리드] 스마트 리마인더 날짜/일정 추출 엔진 */
   const extractReminderFromText = async (text: string): Promise<{ hasReminder: boolean; targetDate: string; content: string }> => {
     const now = new Date();
@@ -782,7 +848,8 @@ export default function MemoApp({ dict, lang }: Props) {
       return;
     }
 
-    const memoText = inputText.trim();
+    // 📅 날짜 키워드("내일", "모레", "25일" 등)를 실제 날짜 문자열로 자동 변환!
+    const memoText = rewriteDateKeywords(inputText.trim());
 
     if (editingMemo) {
       // 1) 프리미엄 유저의 Supabase 백엔드 데이터베이스 동기화
