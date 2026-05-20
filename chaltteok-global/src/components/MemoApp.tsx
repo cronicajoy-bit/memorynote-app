@@ -186,6 +186,19 @@ export default function MemoApp({ dict, lang }: Props) {
   const [isVoiceMode, setIsVoiceMode] = useState(false); // 🎙️ 현재 말로 적기(음성) 모드로 입력 폼이 열려 있는지 제어 상태 추가
   const [isKeyboardOpen, setIsKeyboardOpen] = useState(false); // 📱 모바일 가상 키보드 감지 상태 추가
 
+  // 🪄 저장 시 AI 자동 교정 ON/OFF 설정 (기본값: ON)
+  const [autoAiCorrect, setAutoAiCorrect] = useState(true);
+  // ✨ 저장 완료 토스트 알림 상태
+  const [toastMsg, setToastMsg] = useState('');
+  const [showToast, setShowToast] = useState(false);
+
+  // 토스트 표시 헬퍼
+  const showToastMessage = (msg: string) => {
+    setToastMsg(msg);
+    setShowToast(true);
+    setTimeout(() => setShowToast(false), 2800);
+  };
+
   // 🪄 Gemini API fetch 호출 헬퍼 비동기 함수
   const callGeminiAPI = async (modelName: string, promptText: string, apiKey: string) => {
     const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
@@ -387,88 +400,41 @@ export default function MemoApp({ dict, lang }: Props) {
     }
   };
 
-  // 🪄 어르신 구어체 ➔ 일목요연한 찰떡 어조 변환 초경량 로컬/글로벌 AI 엔진
-  const runAiCorrection = async () => {
-    if (!inputText.trim()) return;
-    setIsAiCorrecting(true);
-    setAiCorrectingMessage('🤖 AI 기억이가 문맥을 짚어보고 있어요...');
-
-    const hintMessages = [
-      '🤖 AI 기억이가 문맥을 짚어보고 있어요...',
-      '✍️ 발음 오류와 맞춤법을 말끔하게 가다듬는 중...',
-      '✨ 다듬어진 생각 문장을 이쁘게 조립하고 있어요...',
-      '⏰ 거의 다 되었습니다! 조금만 더 기다려 주세요...'
-    ];
-    let msgIndex = 0;
-    const intervalId = setInterval(() => {
-      msgIndex = (msgIndex + 1) % hintMessages.length;
-      setAiCorrectingMessage(hintMessages[msgIndex]);
-    }, 2000);
-
-    const cleanup = () => {
-      clearInterval(intervalId);
-      setIsAiCorrecting(false);
-    };
-
-    const originalText = inputText.trim();
+  // 🪄 저장 시 자동 AI 교정용 - 결과값 반환 (토스트 표시용)
+  const runAiCorrectionSilent = async (originalText: string): Promise<{ refined: string; wasAiCorrected: boolean }> => {
     const geminiApiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY;
 
-    // 만약 API Key가 없거나 기본 데모 값일 경우 -> 더욱 지능화된 로컬 스마트 폴백 교정 알고리즘 작동!
+    // 로컬 폴백 교정
+    const localRefine = (text: string): string => {
+      let refined = text
+        .replace(/있잖아|있자녀|있구만|그\.\.|저기\.\.|음\.\.|머시냐|거시기|말이여|말이야/g, '')
+        .replace(/가가지고|가서/g, '방문하여')
+        .replace(/\s+/g, ' ')
+        .replace(/^(아|어|음|그|뭐|저|근데|그래서|어그게)\s*/gi, '')
+        .replace(/\s*(아|어|음|그|뭐|저)\s*$/gi, '')
+        .trim();
+      if (refined && !refined.match(/[.!?。！？]$/)) refined += '.';
+      return refined;
+    };
+
     if (!geminiApiKey || geminiApiKey === '대표님의_키_입력') {
-      setTimeout(() => {
-        cleanup();
-        let refined = originalText
-          // 1) 대표적인 구어체 조사/감탄사 탈락 및 단정한 비서형 정리
-          .replace(/있잖아|있자녀|있구만|그\.\.|저기\.\.|음\.\.|머시냐|거시기|말이여|말이야/g, '')
-          .replace(/가가지고|가서/g, '방문하여')
-          .replace(/\s+/g, ' ')
-          .replace(/^(아|어|음|그|뭐|저|근데|그래서|어그게)\s*/gi, '')
-          .replace(/\s*(아|어|음|그|뭐|저)\s*$/gi, '')
-          .trim();
-
-        if (refined && !refined.match(/[.!?。！？]$/)) {
-          refined += '.';
-        }
-
-        setInputText(refined);
-        alert('💡 [데모 모드] AI API 키가 아직 설정되지 않아, 로컬 스마트 교정기가 깔끔하게 다듬어 드렸어요! 깃허브나 Vercel 환경 변수에 진짜 Gemini API Key(NEXT_PUBLIC_GEMINI_API_KEY)를 등록하시면 초거대 AI 교정이 즉시 동작합니다. 😊');
-      }, 2500);
-      return;
+      await new Promise(r => setTimeout(r, 400)); // 살짝 딜레이로 자연스럽게
+      return { refined: localRefine(originalText), wasAiCorrected: false };
     }
 
     const prompt = `너는 오타, 뭉개진 발음, 중언부언, 사투리가 섞인 중장년층의 한국어 말소리를 자연스럽고 품격 있는 표준 메모 문장으로 다듬는 40대 이상 타겟의 메모장 정리 비서 '기억이'야. 아래 텍스트는 사용자가 음성 인식으로 편하게 흘려 적은 내용이다. 이 내용을 1. 불필요한 추임새 제거, 2. 문맥상 오타 및 맞춤법 교정, 3. 표준어 순화를 거쳐 친근하면서도 정갈한 한글 문장으로 교정해줘. 부가 설명이나 서론, 결론, 따옴표 없이 오직 교정된 최종 결과 문장만 단 한 줄로 출력해야 해.\n\n사용자 음성 입력: "${originalText}"`;
 
     try {
-      // 1차 시도: gemini-2.5-flash
       let refinedText = "";
       try {
         refinedText = await callGeminiAPI("gemini-2.5-flash", prompt, geminiApiKey);
-      } catch (e1) {
-        console.warn("Gemini 2.5 Flash 실패, 1.5 Flash 2차 시도...", e1);
+      } catch {
         refinedText = await callGeminiAPI("gemini-1.5-flash", prompt, geminiApiKey);
       }
-
-      cleanup();
-      if (refinedText) {
-        setInputText(refinedText);
-      } else {
-        throw new Error("응답이 비어있음");
-      }
-    } catch (error) {
-      cleanup();
-      console.error("Gemini API 최종 연동 실패:", error);
-      
-      // 통신 에러 시 로컬 폴백 작동
-      let refined = originalText
-        .replace(/\s+/g, ' ')
-        .replace(/^(아|어|음|그|뭐|저|근데|그래서|어그게)\s*/gi, '')
-        .replace(/\s*(아|어|음|그|뭐|저)\s*$/gi, '')
-        .trim();
-      if (refined && !refined.match(/[.!?。！？]$/)) {
-        refined += '.';
-      }
-      setInputText(refined);
-      alert('⚠️ [인터넷 연결 지연] AI 서버와 일시적으로 통신이 원활하지 않아, 로컬 스마트 교정기가 안전하게 글을 다듬어 드렸어요! 😢');
+      if (refinedText) return { refined: refinedText, wasAiCorrected: true };
+      return { refined: localRefine(originalText), wasAiCorrected: false };
+    } catch {
+      return { refined: localRefine(originalText), wasAiCorrected: false };
     }
   };
 
@@ -910,8 +876,29 @@ export default function MemoApp({ dict, lang }: Props) {
       return;
     }
 
+    // 🪄 저장 시 AI 자동 교정 (설정에서 ON인 경우)
+    let finalText = inputText.trim();
+    setIsAiCorrecting(true);
+    setAiCorrectingMessage(
+      lang === 'en' ? '✨ AI is polishing your note...' :
+      lang === 'ja' ? '✨ AIが整えています...' :
+      '✨ AI 기억이가 살짝 다듬는 중...'
+    );
+    if (autoAiCorrect) {
+      const { refined, wasAiCorrected } = await runAiCorrectionSilent(finalText);
+      finalText = refined;
+      if (wasAiCorrected) {
+        showToastMessage(
+          lang === 'en' ? '✨ AI polished your note!' :
+          lang === 'ja' ? '✨ AIが整えました！' :
+          '✨ AI가 살짝 다듬었어요'
+        );
+      }
+    }
+    setIsAiCorrecting(false);
+
     // 📅 날짜 키워드("내일", "모레", "25일" 등)를 실제 날짜 문자열로 자동 변환!
-    const memoText = rewriteDateKeywords(inputText.trim());
+    const memoText = rewriteDateKeywords(finalText);
 
     if (editingMemo) {
       // 1) 프리미엄 유저의 Supabase 백엔드 데이터베이스 동기화
@@ -1145,7 +1132,41 @@ export default function MemoApp({ dict, lang }: Props) {
             </button>
           </div>
 
-          {/* 3) 로그인 / 회원 관리 행 */}
+          {/* 3) 🪄 AI 자동 교정 ON/OFF 설정 행 */}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)' }}>
+                🪄 {lang === 'en' ? 'Auto AI Polish' : lang === 'ja' ? 'AI自動整理' : '저장 시 AI 자동 교정'}
+              </span>
+              <span style={{ fontSize: '0.72rem', color: 'var(--color-sub)', fontWeight: 600 }}>
+                {lang === 'en' ? 'Auto-refine on Save' : lang === 'ja' ? '保存時に自動整理' : '저장 버튼 누르면 AI가 자동으로 글을 다듬어요'}
+              </span>
+            </div>
+            <button
+              onClick={() => setAutoAiCorrect(p => !p)}
+              style={{
+                padding: '7px 16px',
+                fontWeight: 900,
+                fontSize: '0.85rem',
+                border: '2px solid var(--color-border)',
+                borderRadius: '20px',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                background: autoAiCorrect
+                  ? 'linear-gradient(135deg, #FFF0A0 0%, #FFDE59 100%)'
+                  : 'var(--bg-input)',
+                color: autoAiCorrect ? '#7A5800' : 'var(--color-sub)',
+                boxShadow: autoAiCorrect ? '2px 2px 0 #C8A84B' : '1px 1px 0 var(--color-border)',
+              }}
+            >
+              {autoAiCorrect
+                ? (lang === 'en' ? '✅ ON' : lang === 'ja' ? '✅ ON' : '✅ 켜짐')
+                : (lang === 'en' ? '⬜ OFF' : lang === 'ja' ? '⬜ OFF' : '⬜ 꺼짐')
+              }
+            </button>
+          </div>
+
+          {/* 4) 로그인 / 회원 관리 행 */}
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px dashed var(--color-border)', paddingTop: 10 }}>
             <span style={{ fontSize: '0.9rem', fontWeight: 800, color: 'var(--color-text)' }}>
               👤 {lang === 'en' ? 'Account' : lang === 'ja' ? 'アカウント' : '회원 로그인 및 백업'}
@@ -1466,39 +1487,14 @@ export default function MemoApp({ dict, lang }: Props) {
             {/* 텍스트 입력 모달(인라인) */}
             {showInput && (
               <div style={{ padding: '12px 16px', background: 'var(--bg-card)', borderBottom: '2px solid var(--color-border)' }}>
-                {/* 💡 "글씨로 적기" 모드용 친근한 오타 교정 안내 꿀팁 (대표님 피드백 완벽 매핑) */}
-                {!isVoiceMode && (
-                  <div style={{ 
-                    fontSize: '0.8rem', 
-                    color: 'var(--color-accent)', 
-                    fontWeight: 800, 
-                    marginBottom: '8px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: '4px',
-                    lineHeight: '1.4'
-                  }}>
-                    ✏️ 오타나 띄어쓰기가 조금 틀려도 괜찮아요! 아래 [🪄 AI 깔끔하게 정리]를 누르면 예쁜 표준 문장으로 다듬어 드립니다.
-                  </div>
-                )}
-                <textarea
-                  id="memo-textarea"
-                  value={inputText}
-                  onChange={e => setInputText(e.target.value)}
-                  placeholder={lang === 'en' ? 'Write down your precious memories...' : lang === 'ja' ? '大切な記憶を記録してください...' : '오늘 하루의 소중한 기억을 기록해 보세요...'}
-                  autoFocus
-                  rows={4}
-                  style={{ fontSize: `${fontSize}px` }}
-                />
-                
-                {/* 🎙️ 음성 인식 보조 안내 및 다시 말하기 제어 영역 (대표님 피드백: "글씨로 적기" 모드 시에는 지저분한 음성 가이드와 다시 말하기 버튼을 완전히 보이지 않게 처리!) */}
+                {/* 🎙️ 음성 안내 및 다시 말하기 (음성 모드에서만 표시) */}
                 {isVoiceMode && (
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '4px 0 10px 0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                     <span style={{ fontSize: '0.78rem', color: 'var(--color-sub)' }}>
                       {isListening ? voiceDict.listeningAuto : voiceDict.hintInfo}
                     </span>
                     {!isListening && (
-                      <button 
+                      <button
                         onClick={startSpeechRecognition}
                         style={{
                           background: 'var(--color-accent)',
@@ -1517,8 +1513,18 @@ export default function MemoApp({ dict, lang }: Props) {
                   </div>
                 )}
 
-                {/* 🪄 AI 찰떡 교정 실행 단추 및 로딩 연출 (대표님 인사이트: 항상 제자리에 이쁘게 대기하여 UI 요동 방지!) */}
-                {isAiCorrecting ? (
+                <textarea
+                  id="memo-textarea"
+                  value={inputText}
+                  onChange={e => setInputText(e.target.value)}
+                  placeholder={lang === 'en' ? 'Write down your precious memories...' : lang === 'ja' ? '大切な記憶を記録してください...' : '오늘 하루의 소중한 기억을 기록해 보세요...'}
+                  autoFocus
+                  rows={4}
+                  style={{ fontSize: `${fontSize}px` }}
+                />
+
+                {/* 🪄 저장 중 AI 교정 로딩 인디케이터 */}
+                {isAiCorrecting && (
                   <div style={{
                     background: '#FFF9E6',
                     border: '2px dashed #D4AF37',
@@ -1528,47 +1534,34 @@ export default function MemoApp({ dict, lang }: Props) {
                     fontSize: '0.85rem',
                     fontWeight: 'bold',
                     color: '#B38F00',
-                    marginBottom: '10px'
+                    marginTop: '8px',
+                    marginBottom: '4px'
                   }}>
                     {aiCorrectingMessage}
                   </div>
-                ) : (
-                  <button
-                    onClick={runAiCorrection}
-                    disabled={!inputText.trim()}
-                    style={{
-                      width: '100%',
-                      padding: '10px',
-                      background: inputText.trim() 
-                        ? 'linear-gradient(135deg, #FFE5EC 0%, #FFB7B2 100%)' 
-                        : '#F0F0F0',
-                      color: inputText.trim() ? '#6F2E31' : '#A0A0A0',
-                      border: inputText.trim() ? '2.5px solid #FF8B94' : '2.5px solid #D0D0D0',
-                      borderRadius: '10px',
-                      fontSize: '0.88rem',
-                      fontWeight: 900,
-                      cursor: inputText.trim() ? 'pointer' : 'not-allowed',
-                      marginBottom: '10px',
-                      boxShadow: inputText.trim() ? '2px 2px 0 #FF8B94' : '2px 2px 0 #D0D0D0',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      opacity: inputText.trim() ? 1 : 0.65,
-                      transition: 'all 0.15s ease'
-                    }}
-                    onMouseDown={(e) => inputText.trim() && (e.currentTarget.style.transform = 'translate(1px, 1px)')}
-                    onMouseUp={(e) => inputText.trim() && (e.currentTarget.style.transform = 'none')}
-                  >
-                    {voiceDict.aiPolishBtn}
-                  </button>
                 )}
 
-                <div className="modal-actions" style={{ flexDirection: 'row', gap: 8 }}>
-                  <button className="btn-primary" style={{ flex: 1 }} onClick={saveMemo}>
-                    💾 {editingMemo ? (lang === 'en' ? 'Edit Complete' : lang === 'ja' ? '編集完了' : '수정 완료') : (lang === 'en' ? 'Save' : lang === 'ja' ? '保存' : '저장')}
+                {/* AI 자동 교정 안내 힌트 (설정 ON일 때만 표시) */}
+                {autoAiCorrect && !isAiCorrecting && (
+                  <div style={{ fontSize: '0.75rem', color: 'var(--color-sub)', fontWeight: 700, marginTop: '6px', textAlign: 'center' }}>
+                    🪄 {lang === 'en' ? 'AI will auto-polish on Save' : lang === 'ja' ? '保存時にAIが自動整理します' : '저장하면 AI가 자동으로 글을 다듬어요'}
+                  </div>
+                )}
+
+                {/* 버튼 2개: 저장하기 + 취소 */}
+                <div className="modal-actions" style={{ flexDirection: 'row', gap: 8, marginTop: '10px' }}>
+                  <button
+                    className="btn-primary"
+                    style={{ flex: 1 }}
+                    onClick={saveMemo}
+                    disabled={isAiCorrecting || !inputText.trim()}
+                  >
+                    💾 {editingMemo
+                      ? (lang === 'en' ? 'Edit Complete' : lang === 'ja' ? '編集完了' : '수정 완료')
+                      : (lang === 'en' ? 'Save' : lang === 'ja' ? '保存' : '저장하기')
+                    }
                   </button>
-                  <button className="btn-secondary" onClick={cancelMemo}>
+                  <button className="btn-secondary" onClick={cancelMemo} disabled={isAiCorrecting}>
                     {lang === 'en' ? 'Cancel' : lang === 'ja' ? 'キャンセル' : '취소'}
                   </button>
                 </div>
@@ -1839,6 +1832,29 @@ export default function MemoApp({ dict, lang }: Props) {
               <span style={{ fontSize: '0.78rem', visibility: 'hidden', userSelect: 'none' }}>&nbsp;</span>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ====== ✨ AI 교정 완료 토스트 알림 ====== */}
+      {showToast && (
+        <div style={{
+          position: 'fixed',
+          bottom: '120px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, #FFF0A0 0%, #FFDE59 100%)',
+          border: '2.5px solid #C8A84B',
+          borderRadius: '24px',
+          padding: '12px 24px',
+          fontWeight: 900,
+          fontSize: '1rem',
+          color: '#7A5800',
+          boxShadow: '3px 3px 0 rgba(200,168,75,0.4)',
+          zIndex: 999,
+          whiteSpace: 'nowrap',
+          animation: 'toastIn 0.25s ease',
+        }}>
+          {toastMsg}
         </div>
       )}
 

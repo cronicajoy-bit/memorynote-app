@@ -490,6 +490,11 @@ body.dark-mode .btn-unstar-archive:hover {
   to   { transform: translateY(0);    opacity: 1; }
 }
 
+@keyframes toastIn {
+  from { transform: translateX(-50%) translateY(16px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);    opacity: 1; }
+}
+
 .modal-header {
   display: flex;
   align-items: center;
