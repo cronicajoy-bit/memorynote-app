@@ -1,11 +1,19 @@
 import type { Metadata } from 'next';
-import { Noto_Sans_KR } from 'next/font/google';
+import { Noto_Sans_KR, Noto_Serif_KR } from 'next/font/google';
 import { getDictionary, Locale } from '@/lib/getDictionary';
 
 const notoSansKR = Noto_Sans_KR({
   subsets: ['latin'],
-  weight: ['300', '400', '500', '700'],
+  weight: ['400', '500', '600', '700', '800', '900'],
   display: 'swap',
+  variable: '--font-sans-kr',
+});
+
+const notoSerifKR = Noto_Serif_KR({
+  subsets: ['latin'],
+  weight: ['500', '600', '700', '900'],
+  display: 'swap',
+  variable: '--font-serif-kr',
 });
 
 const localeMetadata: Record<string, Metadata> = {
@@ -67,7 +75,13 @@ export default async function LangLayout({
     : 'ko';
 
   return (
-    <html lang={validLang} className={notoSansKR.className}>
+    <html
+      lang={validLang}
+      className={`${notoSansKR.variable} ${notoSerifKR.variable}`}
+      data-theme="paper"
+      data-size="large"
+      suppressHydrationWarning
+    >
       <body>{children}</body>
     </html>
   );
