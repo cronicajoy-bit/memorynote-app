@@ -70,7 +70,7 @@ export default function DailySummaryCard({
           <span style={{ fontSize: '1.25rem' }}>🌸</span>
           <div>
             <div style={{
-              fontSize: '0.78rem',
+              fontSize: '1rem',             // DESIGN.md caption 최소 16px (1rem)
               fontWeight: 600,
               color: '#8E8E93',
               letterSpacing: '0.02em',
@@ -87,7 +87,7 @@ export default function DailySummaryCard({
                 background: '#FFF0E8',
                 border: '1px solid #E8622A',
                 borderRadius: 20,
-                fontSize: '0.72rem',
+                fontSize: '1rem',            // DESIGN.md caption 최소 16px
                 fontWeight: 700,
                 color: '#E8622A',
               }}>
