@@ -6,6 +6,8 @@ import ShareModal from '@/components/ShareModal';
 import AuthModal from '@/components/AuthModal';
 import PricingModal from '@/components/PricingModal';
 import { useAuth, useSubscription, useMemos } from '@/hooks/useMemos';
+import { useDailySummary } from '@/hooks/useDailySummary';
+import DailySummaryCard from '@/components/DailySummaryCard';
 import { createClient } from '@/lib/supabase/client';
 import { subscribeToPush, scheduleReminder, analyzeTravelType } from '@/lib/pushUtils';
 
@@ -515,6 +517,7 @@ export default function MemoApp({ dict, lang }: Props) {
   const { user, authLoading, signOut } = useAuth();
   const { subscription, isPremium, loading: subLoading } = useSubscription(user);
   const { memos: dbMemos, addMemo, updateMemo, toggleStar: dbToggleStar } = useMemos(user);
+  const { summary: dailySummary, date: dailySummaryDate, isFreeLimit: isDailySummaryFreeLimit } = useDailySummary(user);
   
   const TODAY_KEY = getTodayKey();
   const [searchQuery, setSearchQuery] = useState('');
@@ -1351,6 +1354,16 @@ export default function MemoApp({ dict, lang }: Props) {
                 </span>
               </div>
             </div>
+
+            {/* 🌸 오늘의 기억 — AI 일일 요약 카드 (저녁 9시 Gemini가 생성, 홈 상단 표시) */}
+            <DailySummaryCard
+              summary={dailySummary}
+              date={dailySummaryDate}
+              isFreeLimit={isDailySummaryFreeLimit}
+              isPremium={isPremium}
+              lang={lang as 'ko' | 'en' | 'ja'}
+              onUpgradeClick={() => setShowPricing(true)}
+            />
 
             {/* 🌸 [대표님 요금제 기획안 40~49개 작성 시 - 스마트 카운터 및 벚꽃 리마인더 배너 노출] */}
             {!isPremium && memos.length >= 40 && memos.length < 50 && (

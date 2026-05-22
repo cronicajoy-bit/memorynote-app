@@ -1,0 +1,24 @@
+# 찰떡메모 Supabase 설정
+# =====================================================
+# Edge Function Cron 스케줄
+# =====================================================
+# Supabase Dashboard > Edge Functions > daily-summary 에서
+# 아래 cron 표현식으로 스케줄을 설정하세요:
+#
+# Cron:  0 12 * * *
+#        ↑↑
+#        └─ UTC 12:00 = KST 21:00 (저녁 9시)
+#           KST (Korea Standard Time) = UTC+9
+#
+# 또는 Supabase CLI로 배포 시:
+# supabase functions deploy daily-summary --no-verify-jwt
+# (Dashboard에서 cron 설정은 수동으로 진행)
+#
+# =====================================================
+# 필요한 Supabase Secrets (supabase secrets set)
+# =====================================================
+# supabase secrets set GEMINI_API_KEY=<your-server-only-key>
+# supabase secrets set NEXT_PUBLIC_VAPID_PUBLIC_KEY=<vapid-pub>
+# supabase secrets set VAPID_PRIVATE_KEY=<vapid-priv>
+# supabase secrets set VAPID_EMAIL=mailto:admin@chaltteok.com
+# (SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY는 자동 주입됨)
